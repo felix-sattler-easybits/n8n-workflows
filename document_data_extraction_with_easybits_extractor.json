@@ -1,0 +1,108 @@
+{
+  "name": "Document Data Extraction with easybits Extractor",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Document Upload",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Document Upload",
+              "fieldType": "file"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.5,
+      "position": [
+        0,
+        0
+      ],
+      "id": "039c7b4b-7a15-4eac-8a6d-ce39819295ae",
+      "name": "Document Upload Form",
+      "webhookId": ""
+    },
+    {
+      "parameters": {},
+      "type": "@easybits/n8n-nodes-extractor.easybitsExtractor",
+      "typeVersion": 2,
+      "position": [
+        352,
+        0
+      ],
+      "id": "68dc2f33-b894-4402-8ad1-75b63a35096b",
+      "name": "easybits Extractor for data extraction"
+    },
+    {
+      "parameters": {
+        "content": "## 📥 Document Upload\nHosts a simple web form with a single file upload field. Users can upload any supported document (PDF, PNG, JPEG) directly through their browser.",
+        "height": 336,
+        "width": 320,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -112,
+        -160
+      ],
+      "typeVersion": 1,
+      "id": "6f7c807d-e883-4963-80c2-d9641f9b25e2",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## 🤖 Data Extraction\nSends the uploaded file to the easybits Extractor pipeline. Returns structured data under `json.data`, following the schema you defined in your pipeline mapping.",
+        "height": 336,
+        "width": 320,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        240,
+        -160
+      ],
+      "typeVersion": 1,
+      "id": "673a2a1d-77db-4af6-9993-2a2844d7003f",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "# 📄 easybits Extractor – Document Data Extraction\n\n## What This Workflow Does\nUpload a document (PDF, PNG, or JPEG) via a hosted web form. The file is sent to the **easybits Extractor**, which extracts structured data based on your defined schema and returns it as clean JSON.\n\n## How It Works\n1. **Form Upload** – A user uploads a file through the n8n web form\n2. **Extraction** – The easybits Extractor processes the file and returns structured data under `json.data`\n\n---\n\n## Setup Guide\n\n### 1. Create Your easybits Extractor Pipeline\n1. Go to [extractor.easybits.tech](https://extractor.easybits.tech), sign up and click **\"Create a Pipeline\"** on your dashboard\n2. Fill in the **Pipeline Name** and **Description** – describe the type of document you're processing\n3. Upload a **sample document** as your reference\n4. Click **\"Auto-Mapping\"** – the Extractor analyzes your sample document and automatically suggests fields and descriptions for you\n5. Review the suggested fields, adjust any descriptions if needed, and click **\"Save & Test Pipeline\"** in the test tab to verify that the extraction works correctly\n6. Go to **Pipeline Details → View Pipeline** and copy your **Pipeline ID** and **API Key**\n\n> 💡 **Tip:** The auto-mapping gets you up and running in seconds. But the more specific your field descriptions are, the more accurate your results will be.\n\n### 2. Install the easybits Extractor Node\n1. The node is **verified** and works on n8n Cloud out of the box – just search for \"easybits Extractor\" in the node panel\n2. For self-hosted instances, go to **Settings → Community Nodes → Install** and enter `@easybits/n8n-nodes-extractor`\n\n### 3. Configure the Node\n1. Add the **easybits Extractor** node to your workflow\n2. Enter your **Pipeline ID** and **API Key** from the pipeline details page – that's it\n\nThe node reads binary data directly from the previous node in your workflow. No Base64 conversion or manual HTTP configuration needed.\n\n### 4. Activate & Test\n1. Click **Active** in the top-right corner of n8n\n2. Open the form URL and upload a test document\n3. Check the execution output",
+        "height": 1200,
+        "width": 560
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -704,
+        -592
+      ],
+      "typeVersion": 1,
+      "id": "b551f3e5-af14-4830-8c9c-56767db4f4ef",
+      "name": "Sticky Note2"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Document Upload Form": {
+      "main": [
+        [
+          {
+            "node": "easybits Extractor for data extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
