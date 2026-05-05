@@ -1,0 +1,693 @@
+{
+  "name": "CV Tailor Onboarding (easybits)",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Import my CV",
+        "formDescription": "Upload your CV (PDF). I'll extract your experience, education, skills, and summary into your Master CV sheet.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "CV file",
+              "fieldType": "file",
+              "acceptFileTypes": ".pdf, .png, .jpg, .jpeg",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.5,
+      "position": [
+        16,
+        0
+      ],
+      "name": "On form submission"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "experienceRows",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        928,
+        -208
+      ],
+      "name": "Split: Experiences"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Master CV",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/REPLACE_WITH_YOUR_SHEET_ID/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Master CV",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1L9Jx4MR-A0DskhZfhHB62GwtSVX2A0y1o8k_rn5F1AY/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "role": "={{ $json.role }}",
+            "company": "={{ $json.company }}",
+            "dates": "={{ $json.dates }}",
+            "bullets": "={{ $json.bullets }}",
+            "skills": "={{ $json.skills }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "role",
+              "displayName": "role",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "dates",
+              "displayName": "dates",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "bullets",
+              "displayName": "bullets",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "skills",
+              "displayName": "skills",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1232,
+        -208
+      ],
+      "name": "Append: Experiences"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "educationRows",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        928,
+        0
+      ],
+      "name": "Split: Education"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Master CV",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/REPLACE_WITH_YOUR_SHEET_ID/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 727698800,
+          "mode": "list",
+          "cachedResultName": "Education",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1L9Jx4MR-A0DskhZfhHB62GwtSVX2A0y1o8k_rn5F1AY/edit#gid=727698800"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "dates": "={{ $json.dates }}",
+            "degree": "={{ $json.degree }}",
+            "institution": "={{ $json.institution }}",
+            "details": "={{ $json.details }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "degree",
+              "displayName": "degree",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "institution",
+              "displayName": "institution",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "dates",
+              "displayName": "dates",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "details",
+              "displayName": "details",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1232,
+        0
+      ],
+      "name": "Append: Education"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "skillRows",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        928,
+        192
+      ],
+      "name": "Split: Skills"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Master CV",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/REPLACE_WITH_YOUR_SHEET_ID/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1842653005,
+          "mode": "list",
+          "cachedResultName": "Skills",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1L9Jx4MR-A0DskhZfhHB62GwtSVX2A0y1o8k_rn5F1AY/edit#gid=1842653005"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "skill": "={{ $json.skill }}"
+          },
+          "matchingColumns": [
+            "skill"
+          ],
+          "schema": [
+            {
+              "id": "skill",
+              "displayName": "skill",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1232,
+        192
+      ],
+      "name": "Append: Skills"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Master CV",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/REPLACE_WITH_YOUR_SHEET_ID/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 585954066,
+          "mode": "list",
+          "cachedResultName": "Summary",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1L9Jx4MR-A0DskhZfhHB62GwtSVX2A0y1o8k_rn5F1AY/edit#gid=585954066"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "full_name": "={{ $json.summaryRow.full_name }}",
+            "email": "={{ $json.summaryRow.email }}",
+            "linkedin_url": "={{ $json.summaryRow.linkedin_url }}",
+            "location": "={{ $json.summaryRow.location }}",
+            "summary": "={{ $json.summaryRow.summary }}",
+            "languages": "={{ $json.summaryRow.languages }}",
+            "links": "={{ $json.summaryRow.links }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "full_name",
+              "displayName": "full_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "linkedin_url",
+              "displayName": "linkedin_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "location",
+              "displayName": "location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "languages",
+              "displayName": "languages",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "links",
+              "displayName": "links",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1232,
+        384
+      ],
+      "name": "Append: Summary"
+    },
+    {
+      "parameters": {
+        "jsCode": "const cv = $input.first().json.data;\n\nfunction toArray(value) {\n  if (Array.isArray(value)) return value;\n  if (typeof value === 'string') {\n    try {\n      const parsed = JSON.parse(value);\n      return Array.isArray(parsed) ? parsed : [];\n    } catch (e) {\n      return [];\n    }\n  }\n  return [];\n}\n\nconst experiences = toArray(cv.experiences);\nconst education = toArray(cv.education);\nconst skills = toArray(cv.skills);\nconst languages = toArray(cv.languages);\nconst links = toArray(cv.links);\n\nconst experienceRows = experiences.map(exp => ({\n  role: exp.role || '',\n  company: exp.company || '',\n  dates: exp.dates || '',\n  bullets: Array.isArray(exp.bullets) ? exp.bullets.join(' | ') : (exp.bullets || ''),\n  skills: Array.isArray(exp.skills) ? exp.skills.join(', ') : (exp.skills || '')\n}));\n\nconst educationRows = education.map(ed => ({\n  degree: ed.degree || '',\n  institution: ed.institution || '',\n  dates: ed.dates || '',\n  details: ed.details || ''\n}));\n\nconst skillRows = skills.map(s => ({ skill: typeof s === 'string' ? s : (s.skill || s.name || '') }));\n\nconst summaryRow = {\n  full_name: cv.full_name || '',\n  email: cv.email || '',\n  linkedin_url: cv.linkedin_url || '',\n  location: cv.location || '',\n  summary: cv.summary || '',\n  languages: languages.map(l => `${l.language || ''} (${l.proficiency || ''})`).join(', '),\n  links: links.map(l => `${l.label || ''}: ${l.url || ''}`).join(' | ')\n};\n\nreturn [{\n  json: {\n    experienceRows,\n    educationRows,\n    skillRows,\n    summaryRow,\n    counts: {\n      experiences: experienceRows.length,\n      education: educationRows.length,\n      skills: skillRows.length\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        0
+      ],
+      "name": "Fan-out"
+    },
+    {
+      "parameters": {},
+      "type": "@easybits/n8n-nodes-extractor.easybitsExtractor",
+      "typeVersion": 2,
+      "position": [
+        320,
+        0
+      ],
+      "name": "easybits: Extract CV"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "numberInputs": 4,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1552,
+        -16
+      ],
+      "name": "Wait for All Branches"
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "completionTitle": "\u2705 Your CV has been imported!",
+        "completionMessage": "=<p>Imported:</p>\n</br></br>\n<ul>\n  <li>{{ $('Fan-out').first().json.counts.experiences }} work experiences</li>\n  <li>{{ $('Fan-out').first().json.counts.education }} education entries</li>\n  <li>{{ $('Fan-out').first().json.counts.skills }} skills</li>\n</ul>\n</br></br>\n<p>Open your Master CV sheet and review the imported data before running the tailor workflow.</p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        1760,
+        16
+      ],
+      "name": "Show Completion Screen"
+    },
+    {
+      "parameters": {
+        "content": "# \ud83d\udcc4 CV Onboarding\n(powered by easybits)\n\n## What This Workflow Does\nUpload your CV as a PDF and instantly get a structured \"Master CV\" Google Sheet \u2013 every experience, education entry, skill, and contact detail extracted into the right tab. This gives you a clean personal CV database you can reuse across other workflows (job tailoring, application tracking, skills gap analysis).\n\n## How It Works\n1. **Upload** \u2013 Drop your CV PDF into the n8n web form\n2. **Extract** \u2013 easybits Extractor pulls structured data (experiences, education, skills, summary)\n3. **Fan out** \u2013 A Code node splits the response into rows for each sheet tab\n4. **Append** \u2013 Four parallel branches write to the four tabs of your Master CV sheet\n5. **Done** \u2013 A completion screen confirms what was imported\n\n## Setup Guide\n\n### 1. Prepare Your Master CV Google Sheet\nCreate a Google Sheet named **Master CV** with four tabs:\n- **Master CV** \u2013 columns: `role`, `company`, `dates`, `bullets`, `skills`\n- **Education** \u2013 columns: `degree`, `institution`, `dates`, `details`\n- **Skills** \u2013 single column: `skill`\n- **Summary** \u2013 columns: `full_name`, `email`, `linkedin_url`, `location`, `summary`, `languages`, `links`\n\nLeave all tabs empty below the headers \u2014 the workflow fills them.\n\n### 2. Install & Connect the easybits Extractor\nThe easybits Extractor is a verified n8n community node. On **n8n Cloud** it's available out of the box. On **self-hosted n8n**, install it via Settings \u2192 Community Nodes \u2192 enter `@easybits/n8n-nodes-extractor`.\n\nSign up for a free account at [easybits.tech](https://easybits.tech) to get an API key. Open the **easybits: Extract CV** node in this workflow and connect your credential.\n\n### 3. Configure the Extraction Pipeline\nThe Extractor node uses 10 fields to pull structured data from the CV. Paste each description into the corresponding field's description box in the Extractor node:\n\n**`full_name`** *(string)*\nCandidate's full name as it appears at the top of the CV. Null if not present.\n\n**`email`** *(string)*\nEmail address. Null if not present.\n\n**`linkedin_url`** *(string)*\nFull LinkedIn profile URL. Null if not present.\n\n**`location`** *(string)*\nLocation as written (e.g., \"Berlin, Germany\"). Null if not present.\n\n**`summary`** *(string)*\nPersonal summary or \"about me\" paragraph. Return full text as written, do not paraphrase. Null if no summary section.\n\n**`experiences`** *(array)*\nEach work experience as an object: `role`, `company`, `dates` (range as written), `bullets` (array, one per bullet point), `skills` (array of techs/tools used in this specific role). Preserve original wording of bullets \u2014 do not summarize. List in CV order.\n\n**`education`** *(array)*\nEach entry as an object: `degree`, `institution`, `dates`, `details` (thesis, GPA, honors \u2014 null if none). Empty array if no education section.\n\n**`skills`** *(array)*\nFlat list of all technical skills, tools, frameworks, methodologies, AND certifications listed anywhere in the CV. Each as a short noun phrase. Deduplicate case-insensitively. Exclude soft skills like \"communication\".\n\n**`languages`** *(array)*\nSpoken/written languages as objects: `language`, `proficiency` (as written, e.g., \"C1\", \"fluent\"). Empty array if none.\n\n**`links`** *(array)*\nProfessional URLs other than LinkedIn (GitHub, portfolio, personal site) as objects: `label`, `url`. Empty array if none. Do not include LinkedIn here.\n\nThe 10-field cap matches the easybits free plan, so anyone can run this workflow as-is.\n\n### 4. Connect Google Sheets\nOpen each of the four append nodes (Master CV, Education, Skills, Summary) and connect your Google Sheets credential. Replace the placeholder document ID with your Master CV sheet's ID.\n\n### 5. Activate & Upload\nSet the workflow to active, copy the form URL, and upload your CV. Review the four tabs after \u2013 minor cleanup is normal, especially for two-column or designer CV layouts.\n\n## \ud83d\udd27 Note on the Fan-out Code Node\nThe easybits Extractor wraps its response in a `data` object, so the Fan-out node reads from `$input.first().json.data`. The `toArray()` helper inside the node also handles cases where array fields come back as JSON-encoded strings \u2013 making the workflow robust across different Extractor response shapes.",
+        "height": 2112,
+        "width": 624
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -720,
+        -1024
+      ],
+      "typeVersion": 1,
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## \ud83d\udce5 CV Upload\nHosts a web form with a single file upload field for the CV (PDF, PNG, JPEG). The uploaded file is passed as binary directly to the Extractor.",
+        "height": 400,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -80,
+        -240
+      ],
+      "typeVersion": 1,
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "## \ud83e\udd16 easybits Extract CV\nSends the uploaded file to the easybits Extractor with 10 fields configured: full_name, email, linkedin_url, location, summary, experiences, education, skills, languages, and links. Returns structured JSON wrapped in a `data` object.",
+        "height": 400,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        224,
+        -240
+      ],
+      "typeVersion": 1,
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "## \ud83d\udd00 Fan-out CV Data\nReads the Extractor response from `json.data`, defensively parses any stringified arrays, and splits the data into four output shapes: experienceRows, educationRows, skillRows, and a single summaryRow. Also computes counts for the completion screen.",
+        "height": 400,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        528,
+        -240
+      ],
+      "typeVersion": 1,
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "content": "## \u2702\ufe0f Split Out Items\nThree parallel splitters fan the array fields out into individual items so each row can be appended to its sheet tab independently. Summary doesn't need splitting \u2013 it's already a single row.",
+        "height": 768,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        832,
+        -416
+      ],
+      "typeVersion": 1,
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "content": "## \ud83d\udcdd Append to Sheets\nFour parallel branches write to the four tabs of your Master CV sheet. Each runs independently, so a slow tab doesn't block the others.",
+        "height": 960,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1136,
+        -416
+      ],
+      "typeVersion": 1,
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "content": "## \u2705 Completion Screen\nWaits for all four append branches to finish (via the Merge node), then displays a custom HTML completion page with the import counts so the user knows what landed.",
+        "height": 448,
+        "width": 512,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1440,
+        -240
+      ],
+      "typeVersion": 1,
+      "name": "Sticky Note6"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "easybits: Extract CV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split: Experiences": {
+      "main": [
+        [
+          {
+            "node": "Append: Experiences",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split: Education": {
+      "main": [
+        [
+          {
+            "node": "Append: Education",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split: Skills": {
+      "main": [
+        [
+          {
+            "node": "Append: Skills",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append: Education": {
+      "main": [
+        [
+          {
+            "node": "Wait for All Branches",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Append: Experiences": {
+      "main": [
+        [
+          {
+            "node": "Wait for All Branches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append: Skills": {
+      "main": [
+        [
+          {
+            "node": "Wait for All Branches",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Append: Summary": {
+      "main": [
+        [
+          {
+            "node": "Wait for All Branches",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Fan-out": {
+      "main": [
+        [
+          {
+            "node": "Split: Education",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Split: Experiences",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Split: Skills",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Append: Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "easybits: Extract CV": {
+      "main": [
+        [
+          {
+            "node": "Fan-out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for All Branches": {
+      "main": [
+        [
+          {
+            "node": "Show Completion Screen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "tags": []
+}
