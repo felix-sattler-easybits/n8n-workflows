@@ -1,5 +1,5 @@
 {
-  "name": "Whiteboard to Meeting Doc",
+  "name": "Meeting Notes to Google Doc powered by easybits",
   "nodes": [
     {
       "parameters": {
