@@ -1,0 +1,679 @@
+{
+  "name": "CV Slack Bot: Save to Sheet & Card Actions",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Slack sends interactivity payloads as application/x-www-form-urlencoded\n// with a single `payload` field containing the JSON we care about.\n// n8n parses form data into $json.body — so we read body.payload and JSON.parse it.\n\nconst body = $input.first().json.body || $input.first().json;\nconst raw = body.payload;\n\nif (!raw) {\n  throw new Error('No `payload` field in webhook body. Verify Slack Interactivity Request URL is set correctly and the webhook is receiving form data, not JSON.');\n}\n\nconst payload = typeof raw === 'string' ? JSON.parse(raw) : raw;\nconst action = payload.actions?.[0];\n\nif (!action) {\n  throw new Error('No action in Slack payload — did this fire from something other than a button click?');\n}\n\n// For save_to_sheet, the button's `value` field carries the full candidate JSON\n// that Workflow A stuffed in. Parse it now so the Sheet append doesn't need to.\nlet candidate = null;\nif (action.action_id === 'save_to_sheet') {\n  try {\n    candidate = JSON.parse(action.value);\n  } catch (e) {\n    throw new Error(`Could not parse button value as candidate JSON: ${e.message}`);\n  }\n}\n\nreturn [{\n  json: {\n    action_id: action.action_id,\n    response_url: payload.response_url,\n    user_id: payload.user.id,\n    user_name: payload.user.username || payload.user.name,\n    channel: payload.channel?.id,\n    message_ts: payload.message?.ts,\n    candidate\n  }\n}];"
+      },
+      "id": "d208eda3-08fa-4151-8c02-ebb7607a5c12",
+      "name": "Parse Slack Action Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -448,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "is-save",
+                    "leftValue": "={{ $json.action_id }}",
+                    "rightValue": "save_to_sheet",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "save_to_sheet"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "is-dismiss",
+                    "leftValue": "={{ $json.action_id }}",
+                    "rightValue": "dismiss",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "dismiss"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1266fbd4-19da-465b-a714-b5d3ec0761f0",
+      "name": "Route by Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -144,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Candidates",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "saved_at": "={{ $json.saved_at }}",
+            "saved_by": "={{ $json.saved_by }}",
+            "candidate_name": "={{ $json.candidate_name }}",
+            "location": "={{ $json.location }}",
+            "total_years_experience": "={{ $json.total_years_experience }}",
+            "top_skills": "={{ $json.top_skills }}",
+            "role1_title": "={{ $json.role1_title }}",
+            "role1_company": "={{ $json.role1_company }}",
+            "role1_start": "={{ $json.role1_start }}",
+            "role1_end": "={{ $json.role1_end }}",
+            "role2_title": "={{ $json.role2_title }}",
+            "role2_company": "={{ $json.role2_company }}",
+            "role2_start": "={{ $json.role2_start }}",
+            "role2_end": "={{ $json.role2_end }}",
+            "role3_title": "={{ $json.role3_title }}",
+            "role3_company": "={{ $json.role3_company }}",
+            "role3_start": "={{ $json.role3_start }}",
+            "role3_end": "={{ $json.role3_end }}",
+            "edu1_degree": "={{ $json.edu1_degree }}",
+            "edu1_institution": "={{ $json.edu1_institution }}",
+            "edu1_year": "={{ $json.edu1_year }}",
+            "edu2_degree": "={{ $json.edu2_degree }}",
+            "edu2_institution": "={{ $json.edu2_institution }}",
+            "edu2_year": "={{ $json.edu2_year }}",
+            "edu3_degree": "={{ $json.edu3_degree }}",
+            "edu3_institution": "={{ $json.edu3_institution }}",
+            "edu3_year": "={{ $json.edu3_year }}",
+            "salary_expectations": "={{ $json.salary_expectations }}",
+            "linkedin_url": "={{ $json.linkedin_url }}",
+            "source_file": "={{ $json.source_file }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "saved_at",
+              "displayName": "saved_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "saved_by",
+              "displayName": "saved_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "candidate_name",
+              "displayName": "candidate_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "location",
+              "displayName": "location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "total_years_experience",
+              "displayName": "total_years_experience",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "top_skills",
+              "displayName": "top_skills",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "role1_title",
+              "displayName": "role1_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "role1_company",
+              "displayName": "role1_company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "role1_start",
+              "displayName": "role1_start",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "role1_end",
+              "displayName": "role1_end",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "role2_title",
+              "displayName": "role2_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "role2_company",
+              "displayName": "role2_company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "role2_start",
+              "displayName": "role2_start",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "role2_end",
+              "displayName": "role2_end",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "role3_title",
+              "displayName": "role3_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "role3_company",
+              "displayName": "role3_company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "role3_start",
+              "displayName": "role3_start",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "role3_end",
+              "displayName": "role3_end",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "edu1_degree",
+              "displayName": "edu1_degree",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "edu1_institution",
+              "displayName": "edu1_institution",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "edu1_year",
+              "displayName": "edu1_year",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "edu2_degree",
+              "displayName": "edu2_degree",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "edu2_institution",
+              "displayName": "edu2_institution",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "edu2_year",
+              "displayName": "edu2_year",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "edu3_degree",
+              "displayName": "edu3_degree",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "edu3_institution",
+              "displayName": "edu3_institution",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "edu3_year",
+              "displayName": "edu3_year",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "salary_expectations",
+              "displayName": "salary_expectations",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "linkedin_url",
+              "displayName": "linkedin_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source_file",
+              "displayName": "source_file",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "bd87285e-a0d8-41ce-8727-81067d4c2d49",
+      "name": "Append to Candidates Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        368,
+        0
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_GOOGLESHEETSOAUTH2API_CREDENTIAL",
+          "name": "YOUR Google Sheets OAuth credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Parse Slack Action Payload').first().json.response_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { delete_original: true } }}",
+        "options": {}
+      },
+      "id": "08da6c6f-2340-49fc-886f-e19818e6f67f",
+      "name": "Delete Card on Dismiss",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        160,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "cv-bot-action",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "9690e215-0b06-4f62-803d-1c9a4f89cacb",
+      "name": "Receive Button Click",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -752,
+        128
+      ],
+      "webhookId": "REGENERATE_ON_IMPORT"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "51fbf665-b847-41fc-ac08-e8d001edaad0",
+      "name": "Acknowledge Slack",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -752,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Flatten the nested candidate object into one row with separate columns\n// for roles 1-3 and education entries 1-3.\n// Per Felix's preference: split arrays into discrete columns instead of joining with separators.\n\nconst c = $json.candidate || {};\nconst roles = Array.isArray(c.last_three_roles) ? c.last_three_roles : [];\nconst education = Array.isArray(c.education) ? c.education : [];\n\nconst getRole = (i, field) => roles[i]?.[field] || '';\nconst getEdu = (i, field) => education[i]?.[field] || '';\n\n// String 'null' fallback — Extractor sometimes returns 'null' as a string\nconst clean = (v) => (!v || v === 'null' || v === 'N/A') ? '' : v;\n\nreturn [{\n  json: {\n    saved_at: new Date().toISOString(),\n    saved_by: $json.user_name || '',\n    candidate_name: clean(c.candidate_name),\n    location: clean(c.location),\n    total_years_experience: c.total_years_experience ?? '',\n    top_skills: Array.isArray(c.top_skills) ? c.top_skills.join(', ') : (c.top_skills || ''),\n    role1_title: getRole(0, 'title'),\n    role1_company: getRole(0, 'company'),\n    role1_start: getRole(0, 'start'),\n    role1_end: getRole(0, 'end'),\n    role2_title: getRole(1, 'title'),\n    role2_company: getRole(1, 'company'),\n    role2_start: getRole(1, 'start'),\n    role2_end: getRole(1, 'end'),\n    role3_title: getRole(2, 'title'),\n    role3_company: getRole(2, 'company'),\n    role3_start: getRole(2, 'start'),\n    role3_end: getRole(2, 'end'),\n    edu1_degree: getEdu(0, 'degree'),\n    edu1_institution: getEdu(0, 'institution'),\n    edu1_year: getEdu(0, 'year'),\n    edu2_degree: getEdu(1, 'degree'),\n    edu2_institution: getEdu(1, 'institution'),\n    edu2_year: getEdu(1, 'year'),\n    edu3_degree: getEdu(2, 'degree'),\n    edu3_institution: getEdu(2, 'institution'),\n    edu3_year: getEdu(2, 'year'),\n    salary_expectations: clean(c.salary_expectations),\n    linkedin_url: clean(c.linkedin_url),\n    source_file: clean(c.file_name)\n  }\n}];"
+      },
+      "id": "b8210596-8ab9-42c6-8ebf-092d94cb6ea7",
+      "name": "Flatten Candidate Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Parse Slack Action Payload').first().json.response_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  replace_original: true,\n  blocks: [\n    {\n      type: 'section',\n      text: {\n        type: 'mrkdwn',\n        text: `✅ Saved *${$('Flatten Candidate Data').first().json.candidate_name}* to the candidate sheet — by <@${$('Parse Slack Action Payload').first().json.user_id}>`\n      }\n    }\n  ]\n} }}",
+        "options": {}
+      },
+      "id": "5b1fcefb-4cd2-4184-8123-5ee01b65e7d1",
+      "name": "Update Card: Saved",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        576,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 📥 Receive & Acknowledge Click\nReceives the POST from Slack when a recruiter clicks a button on the action card. **Acknowledge Slack** fires in parallel (not after) – Slack needs a 200 response within **3 seconds** or it shows a red error to the user, even if the rest succeeds.",
+        "height": 624,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -848,
+        -128
+      ],
+      "typeVersion": 1,
+      "id": "45a9f736-1530-4efe-8f8f-fad08ec1707a",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## 🔍 Parse Slack Action Payload\nSlack sends the click as `application/x-www-form-urlencoded` with a single `payload` field containing JSON. This node unpacks it, extracts the action ID, user info, and the candidate JSON we stuffed into the Save button's `value` field back in Workflow A.",
+        "height": 416,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -544,
+        -128
+      ],
+      "typeVersion": 1,
+      "id": "5cd42b02-3faa-4bab-9171-f53e6599bc93",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "## 🚦 Route by Action\nSwitches on `action_id`. `save_to_sheet` goes to the Sheet append path. `dismiss` goes straight to card deletion. Any future action IDs (e.g. send-to-ATS) would slot in here.",
+        "height": 416,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -240,
+        -128
+      ],
+      "typeVersion": 1,
+      "id": "09a76d30-2adf-45e7-b2b7-f1044ed6176f",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "## 💾 Save to Sheet\nFlattens the nested candidate JSON into 30 discrete columns (`role1_title`, `role1_company`, etc.) so the Sheet stays sortable and filterable. Appends a new row, then edits the Slack card via `response_url` to confirm \"✅ Saved by @user\" – no extra Slack OAuth scopes needed.",
+        "height": 304,
+        "width": 704,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        64,
+        -128
+      ],
+      "typeVersion": 1,
+      "id": "10134453-5421-4245-b5fd-0f7efa091286",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "content": "## 🗑️ Dismiss\nDeletes the action card from the thread via `response_url`. Use this when a recruiter peeked at the summary and doesn't want to track the candidate – keeps the channel tidy.",
+        "height": 304,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        64,
+        192
+      ],
+      "typeVersion": 1,
+      "id": "1f5a21ac-ae2a-4b24-bed1-aa58070da2ef",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "content": "# 💾 CV Slack Bot – Save to Sheet & Card Actions\n\nHandles button clicks from the Block Kit cards posted by **Workflow A**. When a recruiter clicks **💾 Save to Sheet**, the candidate is flattened into a row and appended to a Google Sheet, then the card updates to confirm. **Dismiss** simply removes the card.\n\nThis is the \"do something\" half of the recruiter Slack bot – Workflow A is read-only. Both are needed for the full lookup-and-save loop.\n\n## ⚙️ How It Works\n1. **Receive Button Click** – webhook listens for Slack interactivity POSTs\n2. **Acknowledge Slack** – fires in parallel to beat Slack's 3-second timeout\n3. **Parse Slack Action Payload** – unpacks the form-encoded payload, extracts the candidate JSON\n4. **Route by Action** – routes by `action_id` (save_to_sheet vs dismiss)\n5. **Flatten Candidate Data** – splits nested JSON into 30 discrete Sheet columns\n6. **Append to Candidates Sheet** – adds the row to the Sheet\n7. **Update Card: Saved** – edits the Slack card to \"✅ Saved by @user\"\n8. **Delete Card on Dismiss** – removes the card on Dismiss clicks\n\n## 🛠️ Setup Guide\n### 1. Prepare the Google Sheet\n- Create a new Google Sheet\n- Add a tab named exactly `Candidates`\n- Paste this header row into A1 (Sheets will auto-split on commas if you say yes):",
+        "height": 816,
+        "width": 480
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1344,
+        -224
+      ],
+      "typeVersion": 1,
+      "id": "a7d38384-e9ff-4503-8802-55785ffe863f",
+      "name": "Sticky Note5"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Parse Slack Action Payload": {
+      "main": [
+        [
+          {
+            "node": "Route by Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Action": {
+      "main": [
+        [
+          {
+            "node": "Flatten Candidate Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Delete Card on Dismiss",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append to Candidates Sheet": {
+      "main": [
+        [
+          {
+            "node": "Update Card: Saved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Receive Button Click": {
+      "main": [
+        [
+          {
+            "node": "Acknowledge Slack",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Parse Slack Action Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Flatten Candidate Data": {
+      "main": [
+        [
+          {
+            "node": "Append to Candidates Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "",
+  "meta": {},
+  "id": "",
+  "tags": []
+}
