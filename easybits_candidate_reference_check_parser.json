@@ -1,0 +1,670 @@
+{
+  "name": "Reference Check Parser – Turn Reference Emails into a Comparable Candidate Sheet",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "labelIds": []
+        },
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "id": "c10f60e9-13b4-4d44-a3ff-be8f1304ff72",
+      "name": "Gmail Trigger",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": ""
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst binary = item.binary || {};\nconst out = [];\n\nfor (const key of Object.keys(binary)) {\n  const meta = binary[key];\n  out.push({\n    json: {\n      file_name: meta.fileName || '',\n      mime_type: meta.mimeType || '',\n      source_subject: item.json.subject || '',\n      source_from: item.json.from || '',\n    },\n    binary: { data: meta },   // normalize every attachment to the key \"data\"\n  });\n}\n\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        336,
+        0
+      ],
+      "id": "efdf057b-3929-401c-9bfe-a6b67fe18372",
+      "name": "Split Out: Attachments"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "fbb5271c-9f22-486b-9489-8c08f1d1b7cc",
+              "leftValue": "={{ [\"application/pdf\",\"image/jpeg\",\"image/png\",\"image/tiff\"].includes($json.mime_type) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "7de102d9-bfad-4d23-90e3-b54e88378740",
+              "leftValue": "={{ !/logo|signature|footer|icon|banner/i.test($json.file_name) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        640,
+        0
+      ],
+      "id": "2d21dc86-f3ed-498a-ba59-3403d4269c88",
+      "name": "Filter: Real Documents"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        960,
+        0
+      ],
+      "id": "c6dfac5f-b45c-45e2-8644-5f782766c685",
+      "name": "Loop Over Letters"
+    },
+    {
+      "parameters": {},
+      "type": "@easybits/n8n-nodes-extractor.easybitsExtractor",
+      "typeVersion": 2,
+      "position": [
+        1296,
+        176
+      ],
+      "id": "e3ffd559-2671-44b0-b8cc-9cc646781216",
+      "name": "Extract Reference: Letter",
+      "credentials": {
+        "easybitsExtractorApi": {
+          "id": "",
+          "name": ""
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json.data;\n\n// Extractor returns null for missing fields — but also catch the string \"null\" and empties\nconst isMissing = (v) =>\n  v === null || v === undefined || String(v).trim().toLowerCase() === 'null' || String(v).trim() === '';\n\n// Arrays sometimes come back JSON-encoded or comma-joined\nconst toArray = (v) => {\n  if (isMissing(v)) return [];\n  if (Array.isArray(v)) return v;\n  const s = String(v).trim();\n  if (s.startsWith('[')) {\n    try { return JSON.parse(s); } catch (e) { /* fall through */ }\n  }\n  return s.split(',').map(x => x.trim()).filter(Boolean);\n};\n\nconst clean = (v, fallback = '') => isMissing(v) ? fallback : String(v).trim();\n\n// Constrain free-text enums to known values\nconst normEnum = (v, allowed, fallback) => {\n  const s = clean(v).toLowerCase();\n  return allowed.includes(s) ? s : fallback;\n};\n\nconst strengths = toArray(d.claimed_strengths);\nconst weaknesses = toArray(d.claimed_weaknesses);\n\nreturn [{\n  json: {\n    referee_name:          clean(d.referee_name, 'Unknown'),\n    referee_title_company: clean(d.referee_title_company),\n    candidate_name:        clean(d.candidate_name, 'Unknown'),\n    relationship_type:     clean(d.relationship_type).toLowerCase(),\n    duration_known:        clean(d.duration_known),\n    claimed_strengths:     strengths,\n    claimed_weaknesses:    weaknesses,\n    strengths_text:        strengths.join('; '),\n    weaknesses_text:       weaknesses.length ? weaknesses.join('; ') : '— none stated —',\n    would_rehire:          normEnum(d.would_rehire, ['yes', 'no', 'unstated'], 'unstated'),\n    tone:                  normEnum(d.tone, ['positive', 'neutral', 'hedged'], 'neutral'),\n    notable_quote:         clean(d.notable_quote),\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        176
+      ],
+      "id": "e3b79213-3c0f-445f-a6cc-399691c5d308",
+      "name": "Normalize Reference: Fields"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\n\nlet score = 50; // neutral baseline\n\n// Tone (LLM's first-pass read, used as input, not as final grade)\nif (r.tone === 'positive') score += 25;\nif (r.tone === 'hedged')   score -= 25;\n\n// Would-rehire is the single strongest signal in reference checking\nif (r.would_rehire === 'yes') score += 20;\nif (r.would_rehire === 'no')  score -= 35;\n\n// Substance: a real reference names specifics\nscore += Math.min(r.claimed_strengths.length * 3, 12);\n\n// A reference with zero stated weaknesses is often a polite non-endorsement\nif (r.claimed_weaknesses.length === 0 && r.would_rehire !== 'yes') score -= 8;\n\nscore = Math.max(0, Math.min(100, score));\n\n// Tier for routing / colour-coding the sheet\nlet tier = 'mid';\nif (score >= 75) tier = 'high';\nif (score < 45)  tier = 'low';\n\nreturn [{ json: { ...r, sentiment_score: score, sentiment_tier: tier } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1936,
+        176
+      ],
+      "id": "fc583421-66fe-4dcd-aead-3910abd2878c",
+      "name": "Score Reference: Sentiment"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "candidate name": "={{ $json.candidate_name }}",
+            "referee name": "={{ $json.referee_name }}",
+            "referee title & company": "={{ $json.referee_title_company }}",
+            "relationship type": "={{ $json.relationship_type }}",
+            "duration": "={{ $json.duration_known }}",
+            "tone": "={{ $json.tone }}",
+            "would rehire": "={{ $json.would_rehire }}",
+            "sentiment score": "={{ $json.sentiment_score }}",
+            "sentiment tier": "={{ $json.sentiment_tier }}",
+            "strengths text": "={{ $json.strengths_text }}",
+            "weaknesses text": "={{ $json.weaknesses_text }}",
+            "notable quote": "={{ $json.notable_quote }}",
+            "received at": "={{ $now }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "candidate name",
+              "displayName": "candidate name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "referee name",
+              "displayName": "referee name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "referee title & company",
+              "displayName": "referee title & company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "relationship type",
+              "displayName": "relationship type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "duration",
+              "displayName": "duration",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "tone",
+              "displayName": "tone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "would rehire",
+              "displayName": "would rehire",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "sentiment score",
+              "displayName": "sentiment score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "sentiment tier",
+              "displayName": "sentiment tier",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "strengths text",
+              "displayName": "strengths text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "weaknesses text",
+              "displayName": "weaknesses text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "notable quote",
+              "displayName": "notable quote",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "received at",
+              "displayName": "received at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2256,
+        176
+      ],
+      "id": "74f112d8-4d8b-4f13-a4e9-d895ce328d8a",
+      "name": "Append Row: References",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": ""
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "removeLabels",
+        "messageId": "={{ $('Gmail Trigger').item.json.id }}",
+        "labelIds": []
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1280,
+        -224
+      ],
+      "id": "d7be8767-754b-4ff1-923a-b4cb95846cba",
+      "name": "Remove Label: References",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": ""
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $('Gmail Trigger').item.json.id }}",
+        "labelIds": []
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1600,
+        -224
+      ],
+      "id": "eeea6f5b-4682-4f05-91bc-5e573e59b339",
+      "name": "Add Label: Processed",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": ""
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## 📥 Watch for References\nFires when an email lands under the `References` label, with **Download Attachments** on so the scanned letters come through as binary. Keep **Simplify** off – simplified output strips attachments.",
+        "height": 384,
+        "width": 304,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -96,
+        -224
+      ],
+      "typeVersion": 1,
+      "id": "94cb8ca5-b13e-48d1-a46b-1b681fd1af1e",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## 📎 Split Out: Attachments\nTurns one email with several attachments into one item per file, since n8n stacks them on a single item. Renames every binary to the key `data` so the Extractor always reads from the same place.",
+        "height": 384,
+        "width": 304,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        224,
+        -224
+      ],
+      "typeVersion": 1,
+      "id": "3525ea95-fdaf-4bb9-8cc0-f53ee832cf6f",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "## 🛡️ Filter: Real Documents\nKeeps only real PDFs and full-page scans, dropping inline logos, signature snippets, and footer images. Guards on both file type and filename so junk attachments never reach the Extractor.",
+        "height": 384,
+        "width": 304,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        544,
+        -224
+      ],
+      "typeVersion": 1,
+      "id": "2d8e7ebd-6c41-48bb-b4af-a7095ce85092",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "## 🔁 Loop Over Letters\nProcesses one letter at a time so each becomes its own row. The **done** branch (top) runs once at the end to relabel the email; the **loop** branch (bottom) handles each letter.",
+        "height": 384,
+        "width": 304,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        864,
+        -224
+      ],
+      "typeVersion": 1,
+      "id": "76f55168-7806-4d23-92ec-56f66bed82c7",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "content": "## 🤖 Extract Reference: Letter\nSends the letter to the **easybits Extractor**, reading binary directly from the `data` property. Pulls 10 structured fields; anything not found comes back as `null`.",
+        "height": 384,
+        "width": 304,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1184,
+        -32
+      ],
+      "typeVersion": 1,
+      "id": "f0b0ad15-053c-438c-8b87-11dfcb57b970",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "content": "## 🧹 Normalize Reference: Fields\nCleans the raw output: arrays parsed safely, missing values caught, and free text snapped to fixed enums (`tone`, `would_rehire`). This is what makes references comparable across a whole column.",
+        "height": 384,
+        "width": 304,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1504,
+        -32
+      ],
+      "typeVersion": 1,
+      "id": "b264ee3e-c3b2-4aae-bff4-5774cfcd9c5d",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "content": "## 📊 Score Reference: Sentiment\nComputes a 0–100 sentiment score in plain JavaScript – not the LLM grading itself. Would-rehire and tone carry the most weight, and a `high`/`mid`/`low` tier lets you sort the sheet at a glance.",
+        "height": 384,
+        "width": 304,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1824,
+        -32
+      ],
+      "typeVersion": 1,
+      "id": "5ba9b7f4-4fe2-4967-b793-6a202d18c2b5",
+      "name": "Sticky Note6"
+    },
+    {
+      "parameters": {
+        "content": "## 📗 Append Row: References\nWrites one row per letter to the `References` tab. Sorting by candidate then score stacks every reference for a person best-to-worst – the whole point of the build.",
+        "height": 384,
+        "width": 304,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        2144,
+        -32
+      ],
+      "typeVersion": 1,
+      "id": "227f72f5-d47e-4d69-86ef-f0762ecaaf1b",
+      "name": "Sticky Note7"
+    },
+    {
+      "parameters": {
+        "content": "## 🏷️ Remove Label: References\nStrips the `References` label from the original email using the message ID from the trigger. This takes the email out of the trigger's scope.",
+        "height": 384,
+        "width": 304,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1184,
+        -432
+      ],
+      "typeVersion": 1,
+      "id": "065d6a86-f6a2-4e01-80ae-1cfd57f6450d",
+      "name": "Sticky Note8"
+    },
+    {
+      "parameters": {
+        "content": "## ✔️ Add Label: Processed\nTags the email with `Reference processed` so you have a clear audit trail of what's been handled.",
+        "height": 384,
+        "width": 304,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1504,
+        -432
+      ],
+      "typeVersion": 1,
+      "id": "9a31efc9-058c-4f35-a5da-94ae230f31fd",
+      "name": "Sticky Note9"
+    },
+    {
+      "parameters": {
+        "content": "# 📋 Reference Check Parser (powered by easybits)\n\nReference letters arrive as scanned attachments – multi-paragraph prose, no structure, impossible to compare. This workflow reads every letter, pulls the same 10 fields from each, scores the sentiment, and drops one comparable row per reference into a Google Sheet. Sort by candidate then score and a whole inbox of references becomes a ranked, scannable table.\n\n## How It Works\n1. **Watch** – Fires on emails under the `References` label, downloading attachments.\n2. **Split & Guard** – Splits multi-attachment emails into one item each, then filters out logos and footers.\n3. **Extract** – easybits Extractor reads each letter and returns 10 structured fields.\n4. **Normalize & Score** – Fields are cleaned, enums fixed, and a deterministic 0–100 sentiment score is computed.\n5. **Log** – One row per reference lands in the `References` tab.\n6. **Relabel** – The email is marked `Reference processed` so it's never handled twice.\n\n## Setup Guide\n\n1. **easybits Extractor** – on n8n Cloud it's built in; self-hosted, install `@easybits/n8n-nodes-extractor` via Settings → Community Nodes. Free API key at easybits.tech.\n2. **Configure the 10 Extractor fields** – set them up in your easybits Extractor with the field names listed in the **Extractor Fields** section below.\n3. **Gmail** – connect your account; create a `References` label and a `Reference processed` label. Add a filter that auto-applies `References` to incoming reference emails.\n4. **Google Sheet** – one tab named `References` with these headers: `candidate_name`, `referee_name`, `referee_title_company`, `relationship_type`, `duration_known`, `tone`, `would_rehire`, `sentiment_score`, `sentiment_tier`, `strengths_text`, `weaknesses_text`, `notable_quote`, `received_at`.\n5. **Connect credentials** – Gmail (trigger + both relabel nodes), easybits, Google Sheets.\n6. **Activate** and label a reference email to test.\n\n## Extractor Fields\n- **referee_name** *(string)* – who wrote the reference\n- **referee_title_company** *(string)* – their title and company\n- **candidate_name** *(string)* – who the reference is about\n- **relationship_type** *(string)* – manager, peer, report, client, mentor\n- **duration_known** *(string)* – how long they worked together\n- **claimed_strengths** *(array)* – strengths, as short noun phrases\n- **claimed_weaknesses** *(array)* – weaknesses or growth areas\n- **would_rehire** *(string)* – yes, no, unstated\n- **tone** *(string)* – positive, neutral, hedged\n- **notable_quote** *(string)* – one standout sentence, verbatim\n\n## Notes\n- **Free plan friendly.** 10 fields fits the easybits free plan.\n- **Deterministic scoring.** The sentiment score is JavaScript, not an LLM grading its own work – would-rehire and tone weigh heaviest.\n- **No double-processing.** Relabelling drops handled emails out of the trigger's filter automatically.",
+        "height": 1232,
+        "width": 688
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -800,
+        -608
+      ],
+      "typeVersion": 1,
+      "id": "6107689c-2a59-47df-a305-23b433fe73b2",
+      "name": "Sticky Note10"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Split Out: Attachments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out: Attachments": {
+      "main": [
+        [
+          {
+            "node": "Filter: Real Documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter: Real Documents": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Letters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Letters": {
+      "main": [
+        [
+          {
+            "node": "Remove Label: References",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract Reference: Letter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Reference: Letter": {
+      "main": [
+        [
+          {
+            "node": "Normalize Reference: Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Reference: Fields": {
+      "main": [
+        [
+          {
+            "node": "Score Reference: Sentiment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score Reference: Sentiment": {
+      "main": [
+        [
+          {
+            "node": "Append Row: References",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append Row: References": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Letters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remove Label: References": {
+      "main": [
+        [
+          {
+            "node": "Add Label: Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "",
+  "tags": []
+}
