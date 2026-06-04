@@ -1,0 +1,1055 @@
+{
+  "name": "Subscription Price Drift Monitor (powered by easybits)",
+  "nodes": [
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Render the email body to a minimal PDF that easybits can ingest.\n// Pure JavaScript, zero dependencies, runs on n8n Cloud sandbox.\n\nconst item = $input.item.json;\n\n// Pull email content. Prefer plain text; strip HTML if only HTML exists.\nlet bodyText = item.text || item.snippet || '';\nif (!bodyText && item.html) {\n  bodyText = item.html\n    .replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, '')\n    .replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '')\n    .replace(/<br\\s*\\/?>/gi, '\\n')\n    .replace(/<\\/p>/gi, '\\n\\n')\n    .replace(/<[^>]+>/g, '')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/&amp;/g, '&')\n    .replace(/&lt;/g, '<')\n    .replace(/&gt;/g, '>')\n    .replace(/&quot;/g, '\"')\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .trim();\n}\n\n// Build a header so the extractor sees sender, subject, and date too\nconst subject = item.subject || '(no subject)';\nconst from = item.from?.value?.[0]?.address || item.from || '(unknown sender)';\nconst date = item.date || '';\nconst header = `From: ${from}\\nSubject: ${subject}\\nDate: ${date}\\n\\n`;\nconst fullText = header + bodyText;\n\n// Escape characters that have special meaning inside a PDF string\nconst esc = (s) => s.replace(/\\\\/g, '\\\\\\\\').replace(/\\(/g, '\\\\(').replace(/\\)/g, '\\\\)');\n\n// Wrap long lines and split on newlines so the PDF doesn't overflow\nconst MAX_CHARS_PER_LINE = 95;\nconst MAX_LINES_PER_PAGE = 55;\nconst lines = [];\nfor (const rawLine of fullText.split('\\n')) {\n  if (rawLine.length === 0) { lines.push(''); continue; }\n  for (let i = 0; i < rawLine.length; i += MAX_CHARS_PER_LINE) {\n    lines.push(rawLine.slice(i, i + MAX_CHARS_PER_LINE));\n  }\n}\n\n// Split lines across pages\nconst pages = [];\nfor (let i = 0; i < lines.length; i += MAX_LINES_PER_PAGE) {\n  pages.push(lines.slice(i, i + MAX_LINES_PER_PAGE));\n}\nif (pages.length === 0) pages.push(['(empty email body)']);\n\n// Build content streams (one per page)\nconst contentStreams = pages.map((pageLines) => {\n  const body = pageLines.map((line, idx) => {\n    if (idx === 0) return `BT /F1 11 Tf 50 780 Td (${esc(line)}) Tj`;\n    return `T* (${esc(line)}) Tj`;\n  }).join('\\n') + '\\nET';\n  return `q\\n14 TL\\n${body}\\nQ`;\n});\n\n// Assemble the PDF\nconst objects = [];\nconst addObj = (content) => { objects.push(content); return objects.length; };\n\nconst catalogId = addObj('<< /Type /Catalog /Pages 2 0 R >>');\nconst pagesId = addObj(null); // placeholder, fill in below\nconst fontId = addObj('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');\n\nconst pageIds = [];\nconst contentIds = [];\nfor (const stream of contentStreams) {\n  const contentId = addObj(`<< /Length ${stream.length} >>\\nstream\\n${stream}\\nendstream`);\n  contentIds.push(contentId);\n  const pageId = addObj(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentId} 0 R >>`);\n  pageIds.push(pageId);\n}\n\n// Fill pages object\nobjects[pagesId - 1] = `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`;\n\n// Build the PDF byte string\nlet pdf = '%PDF-1.4\\n';\nconst offsets = [];\nfor (let i = 0; i < objects.length; i++) {\n  offsets.push(pdf.length);\n  pdf += `${i + 1} 0 obj\\n${objects[i]}\\nendobj\\n`;\n}\nconst xrefOffset = pdf.length;\npdf += `xref\\n0 ${objects.length + 1}\\n0000000000 65535 f \\n`;\nfor (const off of offsets) {\n  pdf += `${String(off).padStart(10, '0')} 00000 n \\n`;\n}\npdf += `trailer\\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\\nstartxref\\n${xrefOffset}\\n%%EOF`;\n\n// Convert to binary buffer\nconst pdfBuffer = Buffer.from(pdf, 'binary');\n\nreturn {\n  json: {\n    email_id: item.id,\n    subject: subject,\n    from: from,\n    date: date,\n    has_attachment: !!(item.attachments && item.attachments.length > 0),\n  },\n  binary: {\n    ...$input.item.binary,\n    bodyPdf: await this.helpers.prepareBinaryData(pdfBuffer, 'body.pdf', 'application/pdf'),\n  },\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        80,
+        16
+      ],
+      "id": "b79b3463-55a6-4422-b103-a9982f063ea8",
+      "name": "Prepare: Email Body"
+    },
+    {
+      "parameters": {},
+      "type": "@easybits/n8n-nodes-extractor.easybitsExtractor",
+      "typeVersion": 2,
+      "position": [
+        384,
+        -192
+      ],
+      "id": "405b6692-c85c-4c35-809a-99e9ab926fe6",
+      "name": "Extract: Email Body",
+      "credentials": {
+        "easybitsExtractorApi": {
+          "id": "",
+          "name": "YOUR_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// True branch: email has at least one PDF attachment.\n// 1. Stash the body extraction result so it survives the next Extractor call\n// 2. Promote the first PDF attachment to a standard binary key the Extractor can read\n\nconst item = $input.item;\nconst bodyExtraction = item.json.data || {};\n\n// Find the first PDF attachment (skip bodyPdf \u2014 that's our rendered email body)\nconst attachmentEntry = Object.entries(item.binary || {})\n  .find(([key, value]) =>\n    key !== 'bodyPdf' &&\n    (value.mimeType === 'application/pdf' || (value.fileName || '').toLowerCase().endsWith('.pdf'))\n  );\n\nif (!attachmentEntry) {\n  // Safety net \u2014 shouldn't happen because the IF already filtered, but just in case\n  throw new Error('No PDF attachment found despite IF branch routing here. Check the IF node logic.');\n}\n\nconst [attachmentKey, attachmentBinary] = attachmentEntry;\n\nreturn {\n  json: {\n    // Preserve everything from upstream\n    ...item.json,\n    // Stash the body extraction under a separate key so the next Extractor doesn't overwrite it\n    bodyData: bodyExtraction,\n    attachment_filename: attachmentBinary.fileName || 'attachment.pdf',\n  },\n  binary: {\n    // Promote the attachment to a known key for the next Extractor node\n    attachmentPdf: attachmentBinary,\n    // Keep bodyPdf around in case we want it later (e.g. for debugging or archival)\n    bodyPdf: item.binary.bodyPdf,\n  },\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1296,
+        -192
+      ],
+      "id": "ed8a851c-0bae-4aa2-9c57-394f665c2eda",
+      "name": "Prepare: Attachment Binary"
+    },
+    {
+      "parameters": {},
+      "type": "@easybits/n8n-nodes-extractor.easybitsExtractor",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        -192
+      ],
+      "id": "c2c6f15f-d296-452c-a6e7-13df9955ce62",
+      "name": "Extract: PDF Attachment",
+      "credentials": {
+        "easybitsExtractorApi": {
+          "id": "",
+          "name": "YOUR_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        688,
+        0
+      ],
+      "id": "f891b309-fce7-43ea-82b5-5ceba49e9498",
+      "name": "Merge: Reattach Binary"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Merge the body and attachment extractions (when both exist) and stage a\n// clean row for the Google Sheets ledger.\n//\n// Branch awareness:\n//   - If item has `json.bodyData`, this came from the True branch (both\n//     extractions ran). Merge with body priority, attachment as fallback.\n//   - Otherwise, this came from the False branch (body extraction only).\n//     Use it as-is.\n\nconst item = $input.item.json;\n// Pull email metadata directly from the upstream \"Prepare: Email Body\" node.\n// The Extractor overwrites $json with its own {data: ...} envelope, so by the\n// time we get here the email metadata staged in Node 2 has been lost \u2014 except\n// when the True branch's \"Prepare: Attachment Binary\" explicitly stashed it.\nconst emailMeta = $('Prepare: Email Body').item.json;\n\n// Helper: the Extractor returns the literal string \"null\" for missing fields,\n// not real JSON null. Treat both as missing.\nconst isMissing = (v) =>\n  v === null ||\n  v === undefined ||\n  v === 'null' ||\n  (typeof v === 'string' && v.trim() === '');\n\n// Helper: pick body value if present, fall back to attachment value\nconst prefer = (bodyVal, attachVal) =>\n  isMissing(bodyVal) ? (isMissing(attachVal) ? null : attachVal) : bodyVal;\n\n// Determine which branch we came from\nconst cameFromTrueBranch = !!item.bodyData;\n\nlet merged;\nif (cameFromTrueBranch) {\n  const body = item.bodyData || {};\n  const attach = item.data || {};\n  merged = {\n    vendor: prefer(body.vendor, attach.vendor),\n    amount: prefer(body.amount, attach.amount),\n    currency: prefer(body.currency, attach.currency),\n    plan_name: prefer(body.plan_name, attach.plan_name),\n    billing_period: prefer(body.billing_period, attach.billing_period),\n    invoice_date: prefer(body.invoice_date, attach.invoice_date),\n  };\n} else {\n  const body = item.data || {};\n  merged = {\n    vendor: isMissing(body.vendor) ? null : body.vendor,\n    amount: isMissing(body.amount) ? null : body.amount,\n    currency: isMissing(body.currency) ? null : body.currency,\n    plan_name: isMissing(body.plan_name) ? null : body.plan_name,\n    billing_period: isMissing(body.billing_period) ? null : body.billing_period,\n    invoice_date: isMissing(body.invoice_date) ? null : body.invoice_date,\n  };\n}\n\n// Coerce amount to a number (the Extractor sometimes returns it as a string)\nif (merged.amount !== null) {\n  const parsed = parseFloat(String(merged.amount).replace(/,/g, ''));\n  merged.amount = isNaN(parsed) ? null : parsed;\n}\n\n// Normalize vendor: lowercase, trim, strip common suffixes (belt and braces \u2014\n// the Extractor description already asks for this, but never trust it 100%)\nif (merged.vendor !== null) {\n  merged.vendor = String(merged.vendor)\n    .toLowerCase()\n    .trim()\n    .replace(/\\s+(inc|llc|ltd|gmbh|sa|sas|corp|co)\\.?$/i, '')\n    .replace(/[.,]$/, '');\n}\n\n// Required-field check: skip rows that are unusable\nif (isMissing(merged.vendor) || merged.amount === null) {\n  throw new Error(\n    `Skipping receipt: missing vendor (${merged.vendor}) or amount (${merged.amount}). ` +\n    `Email: \"${emailMeta.subject}\" from ${emailMeta.from}. ` +\n    `Check the Extractor output \u2014 body may be empty or attachment may have unusual format.`\n  );\n}\n\nreturn {\n  json: {\n    // Ledger columns (matches Google Sheets schema)\n    date: merged.invoice_date || new Date().toISOString().slice(0, 10),\n    vendor: merged.vendor,\n    amount: merged.amount,\n    currency: merged.currency || 'USD',\n    plan_name: merged.plan_name || '',\n    billing_period: merged.billing_period || '',\n    source_label: 'new',\n    email_id: emailMeta.email_id,\n    // Useful debug context (won't be written to the sheet unless we map it)\n    email_subject: emailMeta.subject,\n    email_from: emailMeta.from,\n    merge_source: cameFromTrueBranch ? 'body+attachment' : 'body-only',\n  },\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1904,
+        16
+      ],
+      "id": "89bf1b3a-675d-4777-892d-aa05075a9600",
+      "name": "Merge & Stage: Receipt Row"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "YOUR_SHEET_GID",
+          "mode": "id"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "email_id",
+              "lookupValue": "={{ $json.email_id }}"
+            }
+          ]
+        },
+        "options": {
+          "returnFirstMatch": true
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2208,
+        16
+      ],
+      "id": "aa24ad0a-4079-4f06-a432-867eab00eaec",
+      "name": "Lookup: Email ID in Ledger",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "YOUR_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "9f83af1d-8f9f-46bc-8e33-8da123a52fa0",
+              "leftValue": "={{ !$json.email_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2512,
+        16
+      ],
+      "id": "b7237096-903a-4b92-8067-dfafbc333117",
+      "name": "Check: Already in Ledger?"
+    },
+    {
+      "parameters": {
+        "operation": "removeLabels",
+        "messageId": "={{ $('Merge & Stage: Receipt Row').item.json.email_id }}",
+        "labelIds": [
+          "YOUR_LABEL_ID"
+        ]
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        4336,
+        -192
+      ],
+      "id": "c5d23ab4-3fef-4266-9e31-5dc40189bf73",
+      "name": "Remove Label: New Invoice",
+      "webhookId": "REGENERATE_ON_IMPORT",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "YOUR_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "your-email@example.com",
+        "subject": "=Duplicate receipt skipped: {{ $('Merge & Stage: Receipt Row').item.json.vendor }}",
+        "message": "=<p>This receipt was already in the ledger and was not added again.</p>\n\n<p><strong>Receipt details</strong><br>\nVendor: {{ $('Merge & Stage: Receipt Row').item.json.vendor }}<br>\nAmount: {{ $('Merge & Stage: Receipt Row').item.json.amount }} {{ $('Merge & Stage: Receipt Row').item.json.currency }}<br>\nPlan: {{ $('Merge & Stage: Receipt Row').item.json.plan_name }}<br>\nBilling period: {{ $('Merge & Stage: Receipt Row').item.json.billing_period }}<br>\nDate on receipt: {{ $('Merge & Stage: Receipt Row').item.json.date }}</p>\n\n<p><strong>Original email</strong><br>\nSubject: {{ $('Merge & Stage: Receipt Row').item.json.email_subject }}<br>\nEmail ID: {{ $('Merge & Stage: Receipt Row').item.json.email_id }}</p>\n\n<p>The \"historical invoice\" label has been removed from this email.</p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2816,
+        240
+      ],
+      "id": "318fc046-d60f-423e-9637-c56c9ec4a181",
+      "name": "Notify: Receipt Already in Ledger",
+      "webhookId": "REGENERATE_ON_IMPORT",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "YOUR_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "removeLabels",
+        "messageId": "={{ $('Merge & Stage: Receipt Row').item.json.email_id }}",
+        "labelIds": [
+          "YOUR_LABEL_ID"
+        ]
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        3120,
+        240
+      ],
+      "id": "cb8d98aa-2b1e-4205-8f09-f5296fd54475",
+      "name": "Remove Label: Duplicate Path",
+      "webhookId": "REGENERATE_ON_IMPORT",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "YOUR_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "YOUR_SHEET_GID",
+          "mode": "id"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "vendor",
+              "lookupValue": "={{ $('Merge & Stage: Receipt Row').item.json.vendor }}"
+            }
+          ]
+        },
+        "options": {
+          "returnFirstMatch": false
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2816,
+        -192
+      ],
+      "id": "c320f3d1-9dcb-45da-8355-2bd9ea5c3395",
+      "name": "Lookup: Vendor History",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "YOUR_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calculate the rolling baseline (avg of last 3 receipts for this vendor)\n// and decide whether to fire a price-increase alert.\n//\n// Deterministic: this Code node alone decides if an alert fires. The Extractor\n// extracts, JS compares, an email narrates \u2014 never the other way around.\n\n// All items coming in = vendor history rows from Node 12 (could be 0..N)\nconst historyRows = $input.all().map((i) => i.json);\n\n// The new receipt being processed \u2014 pull by reference from Node 8\nconst newReceipt = $('Merge & Stage: Receipt Row').first().json;\n\n// Coerce ledger amounts to numbers (Sheets may return them as strings)\nconst toNum = (v) => {\n  if (v === null || v === undefined || v === '') return null;\n  const n = parseFloat(String(v).replace(/,/g, ''));\n  return isNaN(n) ? null : n;\n};\n\n// Sort history by date descending so we can grab the most recent 3\nconst sortedHistory = historyRows\n  .filter((r) => r.email_id !== newReceipt.email_id) // exclude the current receipt if it slipped in\n  .map((r) => ({\n    date: r.date,\n    amount: toNum(r.amount),\n    plan_name: r.plan_name || '',\n    currency: r.currency,\n  }))\n  .filter((r) => r.amount !== null)\n  .sort((a, b) => (b.date || '').localeCompare(a.date || ''));\n\nconst lastThree = sortedHistory.slice(0, 3);\n\n// No history \u2192 first receipt for this vendor. Append, no alert.\nif (lastThree.length === 0) {\n  return [{\n    json: {\n      ...newReceipt,\n      alert: false,\n      reason: 'first_receipt_no_baseline',\n      baseline_amount: null,\n      baseline_sample_size: 0,\n      delta_absolute: null,\n      delta_percent: null,\n      previous_plan: null,\n      plan_changed: false,\n    },\n    pairedItem: { item: 0 },\n  }];\n}\n\n// Compute rolling baseline as average of last 1, 2, or 3 receipts\nconst baselineAmount = lastThree.reduce((sum, r) => sum + r.amount, 0) / lastThree.length;\nconst newAmount = toNum(newReceipt.amount);\n\nconst deltaAbsolute = newAmount - baselineAmount;\nconst deltaPercent = (deltaAbsolute / baselineAmount) * 100;\n\n// Plan change detection \u2014 look at the most recent prior plan\nconst previousPlan = lastThree[0].plan_name;\nconst planChanged = previousPlan && newReceipt.plan_name &&\n  previousPlan.toLowerCase().trim() !== newReceipt.plan_name.toLowerCase().trim();\n\n// Decide: alert only if price INCREASED vs baseline (decreases logged silently)\nconst alert = deltaAbsolute > 0;\n\nreturn [{\n  json: {\n    ...newReceipt,\n    alert,\n    reason: alert ? 'price_increased' : (deltaAbsolute < 0 ? 'price_decreased' : 'no_change'),\n    baseline_amount: Math.round(baselineAmount * 100) / 100,\n    baseline_sample_size: lastThree.length,\n    baseline_dates: lastThree.map((r) => r.date),\n    delta_absolute: Math.round(deltaAbsolute * 100) / 100,\n    delta_percent: Math.round(deltaPercent * 10) / 10,\n    previous_plan: previousPlan || null,\n    plan_changed: planChanged,\n  },\n  pairedItem: { item: 0 },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        -176
+      ],
+      "id": "2b4bfa87-c145-4252-be61-392c34d35630",
+      "name": "Calculate: Rolling Baseline & Delta"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "051c25bf-8a08-4bb2-b382-0bbe2fff25cb",
+              "leftValue": "={{ $json.alert }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3424,
+        -176
+      ],
+      "id": "3009c0fa-efb6-4658-8992-1d76df7ca75d",
+      "name": "Check: Price Increased?"
+    },
+    {
+      "parameters": {
+        "sendTo": "your-email@example.com",
+        "subject": "=Price increase detected: {{ $json.vendor }} (+{{ $json.delta_percent }}%)",
+        "message": "=<p>A new receipt came in for <strong>{{ $json.vendor }}</strong> and the amount is higher than the rolling baseline.</p>  <p><strong>What changed</strong><br> New amount: {{ $json.amount }} {{ $json.currency }}<br> Rolling baseline ({{ $json.baseline_sample_size }} prior receipt(s)): {{ $json.baseline_amount }} {{ $json.currency }}<br> Increase: +{{ $json.delta_absolute }} {{ $json.currency }} (+{{ $json.delta_percent }}%)</p>  <p><strong>Plan</strong><br> Current plan: {{ $json.plan_name }}<br> Previous plan: {{ $json.previous_plan }}<br> Plan changed: {{ $json.plan_changed }}</p>  <p><strong>Receipt details</strong><br> Date on receipt: {{ $json.date }}<br> Billing period: {{ $json.billing_period }}<br> Email subject: {{ $json.email_subject }}<br> Email ID: {{ $json.email_id }}</p>  <p>This receipt has been added to the ledger. The \"new invoice\" label has been removed from the original email.</p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        3728,
+        -192
+      ],
+      "id": "4e9ca437-f4d1-4440-bfb1-696d3b4cdf23",
+      "name": "Notify: Price Drift Alert",
+      "webhookId": "REGENERATE_ON_IMPORT",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "YOUR_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "labelIds": [
+            "YOUR_LABEL_ID"
+          ]
+        },
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -224,
+        16
+      ],
+      "id": "5984405f-fc82-45b5-a640-d01c1cd43b30",
+      "name": "Trigger: New Invoice Label",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "YOUR_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "003bde0e-b465-4884-b3a8-53d6403dc014",
+              "leftValue": "={{ Object.keys($binary || {}).filter(k => k !== 'bodyPdf').length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "c2df0e1c-a740-424e-b41a-dc11dfa57431",
+              "leftValue": "={{ Object.entries($binary || {}).some(([k, v]) => k !== 'bodyPdf' && v.mimeType === 'application/pdf') }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        992,
+        0
+      ],
+      "id": "ffd2ae11-3ef0-4592-af20-c7d95887687e",
+      "name": "Check: Has PDF Attachment?"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "YOUR_SHEET_GID",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "date": "={{ $('Merge & Stage: Receipt Row').item.json.date }}",
+            "vendor": "={{ $('Merge & Stage: Receipt Row').item.json.vendor }}",
+            "amount": "={{ $('Merge & Stage: Receipt Row').item.json.amount }}",
+            "currency": "={{ $('Merge & Stage: Receipt Row').item.json.currency }}",
+            "plan_name": "={{ $('Merge & Stage: Receipt Row').item.json.plan_name }}",
+            "billing_period": "={{ $('Merge & Stage: Receipt Row').item.json.billing_period }}",
+            "source_label": "={{ $('Merge & Stage: Receipt Row').item.json.source_label }}",
+            "email_id": "={{ $('Merge & Stage: Receipt Row').item.json.email_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "date",
+              "displayName": "date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "vendor",
+              "displayName": "vendor",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "amount",
+              "displayName": "amount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "currency",
+              "displayName": "currency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "plan_name",
+              "displayName": "plan_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "billing_period",
+              "displayName": "billing_period",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source_label",
+              "displayName": "source_label",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email_id",
+              "displayName": "email_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        4032,
+        -192
+      ],
+      "id": "76467105-b6e3-4a15-880c-6dad4725a3c1",
+      "name": "Append: Receipt to Ledger",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "YOUR_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## \ud83d\udce9 Trigger: New Labeled Email\nWatches Gmail for new emails carrying the `new invoice` label. Whenever Tom labels a receipt, the workflow picks it up on the next poll (every minute). PDF attachments are downloaded automatically.",
+        "height": 432,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -320,
+        -240
+      ],
+      "typeVersion": 1,
+      "id": "57c360a2-7a88-43fe-95d2-2ec794d01bf8",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## \ud83d\udcc4 Prepare Email Body\nThis step takes the email's subject, sender, date, and body and turns them into a clean format that easybits can read. Pure JavaScript, no external services needed.",
+        "height": 432,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -16,
+        -240
+      ],
+      "typeVersion": 1,
+      "id": "9cb0b055-a2b9-4c2e-9b8e-28a06aa9ba22",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "## \ud83e\udd16 Extract Receipt Details from Email Body\nSends the email body PDF to the **easybits** Extractor pipeline. easybits reads it and returns 6 structured fields: vendor, amount, currency, plan name, billing period, and invoice date.",
+        "height": 432,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        288,
+        -448
+      ],
+      "typeVersion": 1,
+      "id": "fddb443f-b737-45c8-96de-0ce8097227eb",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "## \ud83d\udd17 Reattach the Original Attachment\nThe Extractor drops attachments after processing. This step reunites the extracted data with the original PDF attachment (if there was one) so the next step can check whether one exists.",
+        "height": 432,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        592,
+        -240
+      ],
+      "typeVersion": 1,
+      "id": "7e46809b-a578-4764-8a3b-b6506e6e5e70",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "content": "## \ud83d\udd00 Does the Email Have a PDF Attachment?\nSome receipts have all the info in the email body. Others come as a PDF attachment with a short note in the email. This branch checks if there's a PDF attached and, if so, sends it through a second round of extraction.",
+        "height": 432,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        896,
+        -240
+      ],
+      "typeVersion": 1,
+      "id": "f2f076bd-121b-4ec7-aeb7-3f9dcc7ce259",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "content": "## \ud83d\udcce Prepare the PDF Attachment\nSaves the email body's extraction results to the side (so they don't get lost), then picks out the first PDF attachment and hands it to the next step for a second round of extraction.",
+        "height": 432,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1200,
+        -448
+      ],
+      "typeVersion": 1,
+      "id": "69430108-e12d-4f2c-917f-2ff3a90e5318",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "content": "## \ud83e\udd16 Extract Receipt Details from Attachment\nSends the PDF attachment to the same **easybits** pipeline. Returns the same 6 fields again \u2013 this time from the attachment's content. Useful as a backup in case the email body was light on details.",
+        "height": 432,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1504,
+        -448
+      ],
+      "typeVersion": 1,
+      "id": "bcb021b1-6e68-4f8f-8592-5cc8ac4f74c8",
+      "name": "Sticky Note6"
+    },
+    {
+      "parameters": {
+        "content": "## \ud83e\uddee Combine Both Extractions\nIf both the email body and the attachment were processed, this step merges the two \u2013 preferring whatever the email body said, and falling back to the attachment for any missing fields. The result: one clean row ready for comparison and storage.",
+        "height": 432,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1808,
+        -240
+      ],
+      "typeVersion": 1,
+      "id": "527c5be1-8792-4a7e-9ba1-14bb2e80e037",
+      "name": "Sticky Note7"
+    },
+    {
+      "parameters": {
+        "content": "## \ud83d\udd0d Check if This Receipt is Already in the Ledger\nSearches the Google Sheet for a row with the same email ID. This is the safety net: if Tom accidentally labels the same email twice, the workflow won't add it again.",
+        "height": 432,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        2112,
+        -240
+      ],
+      "typeVersion": 1,
+      "id": "eb3587db-b799-4842-b94e-c62b06b372b4",
+      "name": "Sticky Note8"
+    },
+    {
+      "parameters": {
+        "content": "## \ud83d\udd00 New Receipt or Duplicate?\nRoutes the receipt down one of two paths \u2013 either it's new (add it to the ledger) or it's already there (send a heads-up email and skip).",
+        "height": 432,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        2416,
+        -240
+      ],
+      "typeVersion": 1,
+      "id": "432b4222-4fb9-4835-840c-35c541f93fce",
+      "name": "Sticky Note9"
+    },
+    {
+      "parameters": {
+        "content": "## \ud83d\udcca Look Up This Vendor's History\nFetches all previous receipts for the same vendor from the Google Sheet. These rows form the rolling baseline that the next step uses to detect price changes.",
+        "height": 432,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        2720,
+        -448
+      ],
+      "typeVersion": 1,
+      "id": "f9e1a686-3308-4a44-b4a0-d55c876183be",
+      "name": "Sticky Note10"
+    },
+    {
+      "parameters": {
+        "content": "## \ud83e\uddee Compare Against the Rolling Baseline\nAverages the last 3 receipts for this vendor and compares the new amount against that average. Calculates how much the price went up (or down) in dollars and percent. Also notices if the subscription plan changed (often the *why* behind a price change). If this is the first receipt for the vendor, no comparison is made \u2013 it just gets logged.",
+        "height": 432,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        3024,
+        -448
+      ],
+      "typeVersion": 1,
+      "id": "e66a1d54-5b77-49c8-906f-b50e880647d3",
+      "name": "Sticky Note11"
+    },
+    {
+      "parameters": {
+        "content": "## \ud83d\udd00 Did the Price Go Up?\nIf the new amount is higher than the rolling average \u2192 send an alert. If the price stayed the same or dropped \u2192 log it silently and move on.",
+        "height": 432,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        3328,
+        -448
+      ],
+      "typeVersion": 1,
+      "id": "c80dfca6-0a23-43f9-b66a-7c0491916d72",
+      "name": "Sticky Note12"
+    },
+    {
+      "parameters": {
+        "content": "## \ud83d\udea8 Send Price Drift Alert\nSends Tom an email summarizing what changed: the new amount, the rolling baseline, the dollar and percent increase, and whether the plan changed. The subject line shows the percent increase at a glance.",
+        "height": 432,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        3632,
+        -448
+      ],
+      "typeVersion": 1,
+      "id": "54902d2d-b1b5-4d0d-993e-5cdffe781e0f",
+      "name": "Sticky Note13"
+    },
+    {
+      "parameters": {
+        "content": "## \u2705 Add Receipt to the Ledger\nAppends the receipt as a new row in the **Subscription Ledger** Google Sheet. This happens whether the price went up, down, or stayed the same \u2013 every new receipt becomes part of the rolling baseline for future comparisons.",
+        "height": 432,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        3936,
+        -448
+      ],
+      "typeVersion": 1,
+      "id": "d1e528ad-1b14-498f-8882-7fd71b5120a0",
+      "name": "Sticky Note14"
+    },
+    {
+      "parameters": {
+        "content": "## \ud83c\udff7\ufe0f Remove Label\nStrips the `new invoice` label from the email so it isn't processed again on the next poll.",
+        "height": 432,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        4240,
+        -448
+      ],
+      "typeVersion": 1,
+      "id": "eb24e22b-3b86-475b-bfbd-67f585000c71",
+      "name": "Sticky Note15"
+    },
+    {
+      "parameters": {
+        "content": "## \ud83d\udce7 Send Duplicate Notice\nSends Tom a short email letting him know this receipt was already in the ledger and wasn't added again. Keeps him in the loop without cluttering the Sheet.",
+        "height": 432,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        2720,
+        0
+      ],
+      "typeVersion": 1,
+      "id": "93ea3704-ea9e-4426-9e50-5206c4e54c61",
+      "name": "Sticky Note16"
+    },
+    {
+      "parameters": {
+        "content": "## \ud83c\udff7\ufe0f Remove Label\nStrips the `new invoice` label so the duplicate email isn't picked up again.",
+        "height": 432,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        3024,
+        0
+      ],
+      "typeVersion": 1,
+      "id": "719c2786-6d75-45f7-a4ee-13d6ef0b019c",
+      "name": "Sticky Note17"
+    },
+    {
+      "parameters": {
+        "content": "# \ud83d\udcb8 Subscription Price Drift Monitor (powered by easybits)\n\n## What This Workflow Does\nTom's AI tool subscriptions kept quietly getting more expensive \u2013 small price bumps that he never noticed until his card statement crept up by 30% over six months. This workflow watches Gmail for new subscription receipts that he labels `new invoice`, reads the vendor and amount with **easybits**, compares against the rolling average of his last 3 receipts from the same vendor, and sends him an email alert when the price has gone up.\n\nDecreases and no-change receipts are logged silently. Only price increases trigger an alert. This is the companion to the **Subscription Baseline Seeder** workflow \u2013 run that one first to seed the historical receipts.\n\n## How It Works\n1. Tom labels a new receipt email with `new invoice` in Gmail\n2. The email body is converted into a PDF the **easybits** Extractor can read\n3. easybits pulls out vendor, amount, currency, plan, billing period, and date\n4. If the email also has a PDF receipt attached, easybits reads that too \u2013 and any missing fields in the body get filled in from the attachment\n5. The workflow checks whether this receipt was already processed (duplicate guard)\n6. It looks up the vendor's history in the Google Sheet and averages the last 3 receipts\n7. If the new amount is higher than the average \u2192 Tom gets a price drift alert email\n8. The receipt is added to the ledger either way, and the Gmail label is removed\n\n## Setup Guide\n\n### 1. Run the Subscription Baseline Seeder First\nThis workflow only works once your **Subscription Ledger** Google Sheet has historical receipts in it. Set up and run the **Subscription Baseline Seeder** workflow first to seed your last 2\u20133 receipts per vendor.\n\n### 2. Create the Gmail Label\nIn Gmail, create a label called `new invoice` (lowercase, with the space). Use it for incoming subscription receipts you want monitored.\n\n### 3. Use the Same easybits Pipeline\nThis workflow uses the same `Subscription Receipt` Extractor pipeline as the Baseline Seeder. No new pipeline needed \u2013 just paste your existing **Pipeline ID** and **API Key** into both Extractor nodes.\n\n### 4. Connect Credentials in n8n\n1. **Gmail Trigger** \u2013 connect your Gmail OAuth and select the `new invoice` label\n2. **easybits nodes** \u2013 paste your existing pipeline credentials into both Extractor nodes\n3. **Google Sheets nodes** \u2013 connect your Google Sheets OAuth and point all three nodes at the **Subscription Ledger** sheet (the same one used by the Seeder)\n4. **Gmail notification + label nodes** \u2013 confirm your Gmail OAuth is selected on all three Gmail action nodes\n\n### 5. Test and Activate\nLabel one new receipt with `new invoice`. The workflow should:\n1. Add it to the ledger\n2. Send a price drift alert if the amount is higher than the vendor's recent average\n3. Remove the Gmail label\n\n\nOnce that works, activate the workflow and label every new subscription receipt as it comes in.",
+        "height": 1376,
+        "width": 704
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1040,
+        -784
+      ],
+      "typeVersion": 1,
+      "id": "73b1e18e-9518-4c21-961f-88fa0979c0d9",
+      "name": "Sticky Note18"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Prepare: Email Body": {
+      "main": [
+        [
+          {
+            "node": "Extract: Email Body",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge: Reattach Binary",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Extract: Email Body": {
+      "main": [
+        [
+          {
+            "node": "Merge: Reattach Binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare: Attachment Binary": {
+      "main": [
+        [
+          {
+            "node": "Extract: PDF Attachment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge: Reattach Binary": {
+      "main": [
+        [
+          {
+            "node": "Check: Has PDF Attachment?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract: PDF Attachment": {
+      "main": [
+        [
+          {
+            "node": "Merge & Stage: Receipt Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge & Stage: Receipt Row": {
+      "main": [
+        [
+          {
+            "node": "Lookup: Email ID in Ledger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup: Email ID in Ledger": {
+      "main": [
+        [
+          {
+            "node": "Check: Already in Ledger?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check: Already in Ledger?": {
+      "main": [
+        [
+          {
+            "node": "Lookup: Vendor History",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify: Receipt Already in Ledger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify: Receipt Already in Ledger": {
+      "main": [
+        [
+          {
+            "node": "Remove Label: Duplicate Path",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup: Vendor History": {
+      "main": [
+        [
+          {
+            "node": "Calculate: Rolling Baseline & Delta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate: Rolling Baseline & Delta": {
+      "main": [
+        [
+          {
+            "node": "Check: Price Increased?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check: Price Increased?": {
+      "main": [
+        [
+          {
+            "node": "Notify: Price Drift Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify: Price Drift Alert": {
+      "main": [
+        [
+          {
+            "node": "Append: Receipt to Ledger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger: New Invoice Label": {
+      "main": [
+        [
+          {
+            "node": "Prepare: Email Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check: Has PDF Attachment?": {
+      "main": [
+        [
+          {
+            "node": "Prepare: Attachment Binary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge & Stage: Receipt Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append: Receipt to Ledger": {
+      "main": [
+        [
+          {
+            "node": "Remove Label: New Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "tags": []
+}
