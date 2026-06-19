@@ -1,0 +1,537 @@
+{
+  "name": "My workflow 12",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const out = [];\nfor (const item of $input.all()) {\n  const bin = item.binary || {};\n  for (const key of Object.keys(bin)) {\n    out.push({\n      json: { source_file: bin[key].fileName || key },\n      binary: { data: bin[key] },\n      pairedItem: { item: 0 }\n    });\n  }\n}\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        0
+      ],
+      "id": "75d9c034-4872-4746-9106-377710238e80",
+      "name": "Split: Files to Items"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        672,
+        0
+      ],
+      "id": "1b573b79-d0fc-4845-abf3-ec15d64c79c9",
+      "name": "Loop: One File at a Time"
+    },
+    {
+      "parameters": {},
+      "type": "@easybits/n8n-nodes-extractor.easybitsExtractor",
+      "typeVersion": 2,
+      "position": [
+        944,
+        0
+      ],
+      "id": "5ecd2580-8fc8-413b-b451-163ca70ae595",
+      "name": "easybits: Extract Invoice Fields",
+      "credentials": {
+        "easybitsExtractorApi": {
+          "id": "",
+          "name": ""
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1216,
+        0
+      ],
+      "id": "1f53db59-9ea5-4ed6-b7d4-155dc84d35b2",
+      "name": "Merge: Reattach Filename"
+    },
+    {
+      "parameters": {
+        "jsCode": "function isMissing(v) {\n  if (v === null || v === undefined) return true;\n  if (typeof v === 'string') {\n    const t = v.trim().toLowerCase();\n    return t === '' || t === 'null';\n  }\n  return false;\n}\n\nconst critical = ['invoice_number', 'invoice_date', 'vendor_name', 'total_amount'];\n\nconst item = $input.first();\nconst data = item.json.data;\nconst filename = item.json.source_file ?? `File ${$runIndex + 1}`;\n\nlet status, missing = [];\nif (!data || typeof data !== 'object' || Object.keys(data).length === 0) {\n  status = '❌'; // extraction failed outright\n} else {\n  missing = critical.filter(k => isMissing(data[k]));\n  status = missing.length === 0 ? '✅' : '❌';\n}\n\n// Accumulate across loop iterations so Build Summary can list every file.\n// $runIndex === 0 is the first iteration of this run, so we reset there.\nconst store = $getWorkflowStaticData('global');\nif ($runIndex === 0) store.invoiceBatch = [];\nstore.invoiceBatch.push({ source_file: filename, status });\n\n// Keep `data` nested so 'Append row in sheet' can read $json.data.<field>\nreturn [{\n  json: { data, source_file: filename, status, missing_fields: missing.join(', ') },\n  pairedItem: { item: 0 }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1488,
+        0
+      ],
+      "id": "391f3d05-7f0c-490f-ab01-6b1e36351e84",
+      "name": "Flag: Check Core Fields"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "billing_period": "={{ $json.data.billing_period }}",
+            "currency": "={{ $json.data.currency }}",
+            "customer_name": "={{ $json.data.customer_name }}",
+            "customer_vat_id": "={{ $json.data.customer_vat_id }}",
+            "invoice_date": "={{ $json.data.invoice_date }}",
+            "invoice_number": "={{ $json.data.invoice_number }}",
+            "payment_status": "={{ $json.data.payment_status }}",
+            "total_amount": "={{ $json.data.total_amount }}",
+            "vendor_name": "={{ $json.data.vendor_name }}",
+            "vendor_vat_id": "={{ $json.data.vendor_vat_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "invoice_number",
+              "displayName": "invoice_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "invoice_date",
+              "displayName": "invoice_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "total_amount",
+              "displayName": "total_amount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "currency",
+              "displayName": "currency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "vendor_name",
+              "displayName": "vendor_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "vendor_vat_id",
+              "displayName": "vendor_vat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "customer_name",
+              "displayName": "customer_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "customer_vat_id",
+              "displayName": "customer_vat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "payment_status",
+              "displayName": "payment_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "billing_period",
+              "displayName": "billing_period",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1760,
+        0
+      ],
+      "id": "c41a8f50-8826-4f0f-852c-4e3d31fd94f1",
+      "name": "Append: Invoice Row",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": ""
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const store = $getWorkflowStaticData('global');\nconst rows = store.invoiceBatch || [];\nconst total = rows.length;\nconst failed = rows.filter(r => r.status === '❌').length;\n\nconst header = failed === 0\n  ? `All ${total} invoice(s) processed successfully.`\n  : `${total - failed} of ${total} processed cleanly. ${failed} need a second look.`;\n\nconst list = rows.map(r => `${r.status} ${r.source_file}`).join('<br>');\n\nreturn { json: { summary: `${header}<br><br>${list}` } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        944,
+        -448
+      ],
+      "id": "51c705f4-d7bf-43b3-9298-45de9b840c69",
+      "name": "Build: Upload Summary"
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "completionTitle": "Upload Processed Successfully",
+        "completionMessage": "={{ $json.summary }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        1216,
+        -448
+      ],
+      "id": "fcdeff6c-2025-4bea-8a4a-61be85617a61",
+      "name": "Respond: Completion Summary"
+    },
+    {
+      "parameters": {
+        "content": "## 📥 Upload Form\nHosts a web form where the user uploads one or more invoices (JPG, PNG, or PDF). Each submission starts the workflow.",
+        "height": 432,
+        "width": 256,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        48,
+        -256
+      ],
+      "typeVersion": 1,
+      "id": "2138042a-83e8-4bb0-8e14-12984a21148e",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "formTitle": "Invoice Upload & Data Extraction",
+        "formDescription": "Upload your PNG, JPG, or PDF files and we’ll automatically extract and structure the information for you.\n\nSimply choose a file, submit it, and our system will process the content to generate usable data, saving you time on manual entry.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Document Upload",
+              "fieldType": "file",
+              "acceptFileTypes": "jpg, png, pdf",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.5,
+      "position": [
+        128,
+        0
+      ],
+      "id": "316e00d2-9be0-4230-ae95-c8b2222137c0",
+      "name": "Receive: Invoice Uploads"
+    },
+    {
+      "parameters": {
+        "content": "## ✂️ Split Files\nTurns the uploaded files into one item per file and renames each file's binary to `data` so the Extractor can read it. Keeps the original filename so we can show it in the summary later.",
+        "height": 432,
+        "width": 256,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        320,
+        -256
+      ],
+      "typeVersion": 1,
+      "id": "0f6b627b-96d9-452d-9063-8018833d9be3",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "## 🔁 Loop One File at a Time\nFeeds the Extractor a single file per pass. The Extractor bundles\neverything it receives into one request and returns one result,\nso looping is what gives us one clean result per invoice. When all files are done, the top output sends the summary to the form.",
+        "height": 432,
+        "width": 256,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        592,
+        -256
+      ],
+      "typeVersion": 1,
+      "id": "391dffd0-a051-4870-a691-6a438faf0ac6",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "content": "## 🧠 Extract Invoice Fields\nSends the file to the easybits Extractor, which returns the invoice fields under `data`. Set to continue on error, so a bad file gets flagged instead of stopping the whole batch.",
+        "height": 432,
+        "width": 256,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        864,
+        -256
+      ],
+      "typeVersion": 1,
+      "id": "78f11707-e476-421d-97ab-ee0f3bc8b3ae",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "content": "## 🔗 Reattach Filename\nThe Extractor drops the filename when it returns its result. This combines the extracted fields with the original file info by position, so the filename rides along again.",
+        "height": 432,
+        "width": 256,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1136,
+        -256
+      ],
+      "typeVersion": 1,
+      "id": "41b4a3c9-1ea9-4c23-8b9d-1d694c1022c3",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "content": "## 🚦 Flag Status\nChecks the core fields (invoice number, date, vendor, total). If any is missing, empty, whitespace, or \"null\", the invoice is marked ❌, otherwise ✅. Each result is stored so the summary can list them all\nat the end.",
+        "height": 432,
+        "width": 256,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1408,
+        -256
+      ],
+      "typeVersion": 1,
+      "id": "3427aca8-e0b8-490b-a3b2-1f3b1e7bab08",
+      "name": "Sticky Note6"
+    },
+    {
+      "parameters": {
+        "content": "## 📊 Save to Sheet\nAdds one row per invoice to the Google Sheet with all extracted\nfields. Value input is set to RAW so amounts and dates land exactly as extracted.",
+        "height": 432,
+        "width": 256,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1680,
+        -256
+      ],
+      "typeVersion": 1,
+      "id": "47b7ba92-aa84-4b07-b3ff-12754bb1b6da",
+      "name": "Sticky Note7"
+    },
+    {
+      "parameters": {
+        "content": "## 📝 Build Summary\nRuns once after the loop finishes. Reads every stored result and builds the message the form shows, listing each file with its mark.",
+        "height": 432,
+        "width": 256,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        864,
+        -704
+      ],
+      "typeVersion": 1,
+      "id": "42642da9-fcb8-4033-a506-60d9c62b013b",
+      "name": "Sticky Note8"
+    },
+    {
+      "parameters": {
+        "content": "## ✅ Completion Screen\nShows the summary to the user after upload, so they can see which invoices processed cleanly and which need a second look.",
+        "height": 432,
+        "width": 256,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1136,
+        -704
+      ],
+      "typeVersion": 1,
+      "id": "99b6a542-af19-4220-84a8-73a6479a6475",
+      "name": "Sticky Note9"
+    },
+    {
+      "parameters": {
+        "content": "## 📄 Batch Invoice Extractor (powered by easybits)\n\nUpload one or more invoices (JPG, PNG, or PDF) through a web form.\nEach file is read by the easybits Extractor, which pulls out the key\ninvoice fields and writes them to a Google Sheet. When the batch\nfinishes, the form shows a summary listing each file with a ✅ or ❌,\nso you know at a glance whether anything needs a second look.\n\n## 🔁 How it flows\nUpload → split into one item per file → loop one file at a time →\nextract fields → reattach the filename → check the core fields →\nappend a row → show the summary.\n\n## ❓ Why one file at a time\nThe Extractor bundles every file it receives into a single request\nand returns one result. Feeding it a single file per loop pass is\nwhat gives one clean result per invoice.\n\n## ⚙️ Setup\n\n**1. Install the Extractor node**\nn8n Cloud: open the nodes panel and search \"easybits\". It is a\nverified node, so it shows up directly. Add it.\nSelf-hosted: Settings → Community Nodes → Install, then enter\n`@easybits/n8n-nodes-extractor`.\n\n**2. Create your pipeline**\nSign up at https://go.easybits.tech/extractor-platform, create a\npipeline, and add your fields (invoice_number, invoice_date, and so\non), giving each a short description of what to pull. Or skip the\nmanual setup: upload an example invoice and use the auto-mapping\nfeature to detect and map all the fields for you, then tweak the\ndescriptions as needed. The free tier covers 50 extractions per\nmonth. Copy the API key when done.\n\n**3. Connect it in n8n**\nOn the Extract node, create an easybits credential and paste the API\nkey. Set the input to read the binary property named `data`, which\nis what the Split node produces.\n\n**4. Point the Sheet node at your own Google Sheet**\nPick your spreadsheet and tab, and set value input to RAW so amounts\nand dates are stored exactly as extracted.\n\nDocs: extractor.easybits.tech/documentation/integration",
+        "height": 1024,
+        "width": 560
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -528,
+        -752
+      ],
+      "typeVersion": 1,
+      "id": "b8c763a1-1d12-46f9-bf8b-c02bd1d7b4ec",
+      "name": "Sticky Note2"
+    }
+  ],
+  "connections": {
+    "Split: Files to Items": {
+      "main": [
+        [
+          {
+            "node": "Loop: One File at a Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop: One File at a Time": {
+      "main": [
+        [
+          {
+            "node": "Build: Upload Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "easybits: Extract Invoice Fields",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge: Reattach Filename",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "easybits: Extract Invoice Fields": {
+      "main": [
+        [
+          {
+            "node": "Merge: Reattach Filename",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge: Reattach Filename": {
+      "main": [
+        [
+          {
+            "node": "Flag: Check Core Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Flag: Check Core Fields": {
+      "main": [
+        [
+          {
+            "node": "Append: Invoice Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append: Invoice Row": {
+      "main": [
+        [
+          {
+            "node": "Loop: One File at a Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build: Upload Summary": {
+      "main": [
+        [
+          {
+            "node": "Respond: Completion Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Receive: Invoice Uploads": {
+      "main": [
+        [
+          {
+            "node": "Split: Files to Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "active": false
+}
