@@ -1,0 +1,607 @@
+{
+  "name": "Product Content Creation (WF2)",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "submissionId",
+              "type": "any"
+            },
+            {
+              "name": "productImages",
+              "type": "any"
+            },
+            {
+              "name": "consolidatedSpec",
+              "type": "any"
+            },
+            {
+              "name": "notes",
+              "type": "any"
+            },
+            {
+              "name": "submissionFolderId",
+              "type": "any"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -224,
+        0
+      ],
+      "id": "9392705c-5842-4fef-a492-c09241ca0a3f",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pull inputs from the trigger\nconst trigger = $input.first().json;\nconst submissionId = trigger.submissionId;\nconst submissionFolderId = trigger.submissionFolderId;\nconst productImages = trigger.productImages || [];\nconst consolidatedSpec = trigger.consolidatedSpec;\nconst notes = trigger.notes;\n\n// If no images came in, return a single summary item so the loop just skips\nif (productImages.length === 0) {\n  return [{\n    json: {\n      submissionId: submissionId,\n      submissionFolderId: submissionFolderId,\n      consolidatedSpec: consolidatedSpec,\n      notes: notes,\n      imageCount: 0,\n      noImages: true,\n    },\n    pairedItem: { item: 0 },\n  }];\n}\n\n// Create one output item per image\nconst items = productImages.map((img, idx) => ({\n  json: {\n    submissionId: submissionId,\n    submissionFolderId: submissionFolderId,\n    consolidatedSpec: consolidatedSpec,\n    notes: notes,\n    imageIndex: idx,\n    filename: img.filename || `image_${idx}.jpg`,\n    mimeType: img.mimeType || 'image/jpeg',\n    binaryKey: img.binaryKey || null,\n  },\n  pairedItem: { item: 0 },\n}));\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16,
+        0
+      ],
+      "id": "5adaf065-0832-4d4d-8ac7-8deef614ba4e",
+      "name": "Expand Image Items"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        416,
+        0
+      ],
+      "id": "d97a2120-5083-47ae-b785-cc4b00f55b0d",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "searchMethod": "query",
+        "queryString": "=name = '{{ $json.filename }}' and '{{ $json.submissionFolderId }}' in parents and trashed = false",
+        "limit": 1,
+        "filter": {
+          "whatToSearch": "files"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        624,
+        80
+      ],
+      "id": "eccb44be-d42d-4bf1-bf63-65d53c2df677",
+      "name": "Search files and folders"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {
+          "binaryPropertyName": "data"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        832,
+        80
+      ],
+      "id": "07b2796a-6727-430e-9120-946f8fa4c543",
+      "name": "Download file"
+    },
+    {
+      "parameters": {},
+      "type": "@easybits/n8n-nodes-extractor.easybitsExtractor",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        80
+      ],
+      "id": "199f2cc1-9acd-4270-aa89-ae1fc2597d82",
+      "name": "Extract a document"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the extracted data and normalize \"null\" strings to real null\nconst extracted = $json.data || {};\nconst cleaned = {};\n\nfor (const [key, value] of Object.entries(extracted)) {\n  if (value === 'null') {\n    cleaned[key] = null;\n  } else if (Array.isArray(value)) {\n    // Filter out any \"null\" strings from arrays too\n    cleaned[key] = value.filter(v => v !== 'null');\n  } else {\n    cleaned[key] = value;\n  }\n}\n\n// Pull metadata from the Expand Image Items node so we know which image this is\nconst imageMeta = $('Expand Image Items').item.json;\n\nreturn {\n  json: {\n    submissionId: imageMeta.submissionId,\n    submissionFolderId: imageMeta.submissionFolderId,\n    consolidatedSpec: imageMeta.consolidatedSpec,\n    notes: imageMeta.notes,\n    imageIndex: imageMeta.imageIndex,\n    filename: imageMeta.filename,\n    imageAttributes: cleaned,\n    source: 'extractor',\n  },\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1248,
+        80
+      ],
+      "id": "b66edf8e-c6ad-4cbe-9827-de23dde58472",
+      "name": "Wrap Image Extraction Output"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Gather all per-image results from the loop\nconst allItems = $input.all();\n\n// Handle the no-images case (Expand Image Items returned a single noImages marker)\nif (allItems.length === 1 && allItems[0].json.noImages === true) {\n  const meta = allItems[0].json;\n  return [{\n    json: {\n      submissionId: meta.submissionId,\n      submissionFolderId: meta.submissionFolderId,\n      consolidatedSpec: meta.consolidatedSpec,\n      notes: meta.notes,\n      imageData: [],\n      imageCount: 0,\n    },\n    pairedItem: { item: 0 },\n  }];\n}\n\n// Pull shared metadata from the first item (same across all images in this submission)\nconst first = allItems[0].json;\nconst submissionId = first.submissionId;\nconst submissionFolderId = first.submissionFolderId;\nconst consolidatedSpec = first.consolidatedSpec;\nconst notes = first.notes;\n\n// Build the imageData array - one entry per image, sorted by imageIndex\nconst imageData = allItems\n  .map(item => ({\n    index: item.json.imageIndex,\n    filename: item.json.filename,\n    attributes: item.json.imageAttributes,\n  }))\n  .sort((a, b) => a.index - b.index);\n\nreturn [{\n  json: {\n    submissionId: submissionId,\n    submissionFolderId: submissionFolderId,\n    consolidatedSpec: consolidatedSpec,\n    notes: notes,\n    imageData: imageData,\n    imageCount: imageData.length,\n  },\n  pairedItem: { item: 0 },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        -176
+      ],
+      "id": "f217c7e7-55ba-4aaf-b3f6-52a2c62a8056",
+      "name": "Consolidate Image Data"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Product Content Submissions",
+          "cachedResultUrl": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Submissions",
+          "cachedResultUrl": ""
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "submission_id": "={{ $json.submissionId }}",
+            "image_data": "={{ JSON.stringify($json.imageData) }}",
+            "status": "images_analyzed"
+          },
+          "matchingColumns": [
+            "submission_id"
+          ],
+          "schema": [
+            {
+              "id": "submission_id",
+              "displayName": "submission_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "received_at",
+              "displayName": "received_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "sku_id",
+              "displayName": "sku_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "brand",
+              "displayName": "brand",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "notes",
+              "displayName": "notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "file_count",
+              "displayName": "file_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "spec_data",
+              "displayName": "spec_data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "image_data",
+              "displayName": "image_data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "content_data",
+              "displayName": "content_data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        832,
+        -176
+      ],
+      "id": "1578bac8-2bdb-4e93-a25e-cb51f7cc2f85",
+      "name": "Google Sheets – Update submission row"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "264d0f0b-55c4-4695-90a6-d06f910467aa",
+              "name": "submissionId",
+              "value": "={{ $('Consolidate Image Data').first().json.submissionId }}",
+              "type": "string"
+            },
+            {
+              "id": "6ef0b9e0-6f76-456e-a3ac-9b579131d48c",
+              "name": "submissionFolderId",
+              "value": "={{ $('Consolidate Image Data').first().json.submissionFolderId }}",
+              "type": "string"
+            },
+            {
+              "id": "28714417-671e-40b7-90d9-592e89243ad7",
+              "name": "consolidatedSpec",
+              "value": "={{ $('Consolidate Image Data').first().json.consolidatedSpec }}",
+              "type": "object"
+            },
+            {
+              "id": "c6975510-563c-4739-a571-bd5975f4a02b",
+              "name": "imageData",
+              "value": "={{ $('Consolidate Image Data').first().json.imageData }}",
+              "type": "array"
+            },
+            {
+              "id": "72167afd-dabe-4aec-b076-cef08cf38117",
+              "name": "notes",
+              "value": "={{ $('Consolidate Image Data').first().json.notes }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1040,
+        -176
+      ],
+      "id": "70ccb476-d0f9-4887-a958-961df8d12420",
+      "name": "Build WF3 Payload"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "YOUR_WF3_ID",
+          "mode": "list",
+          "cachedResultUrl": "",
+          "cachedResultName": "Product Content Creation (WF3)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "submissionId": "={{ $('Build WF3 Payload').first().json.submissionId }}",
+            "submissionFolderId": "={{ $('Build WF3 Payload').first().json.submissionFolderId }}",
+            "consolidatedSpec": "={{ $('Build WF3 Payload').first().json.consolidatedSpec }}",
+            "imageData": "={{ $('Build WF3 Payload').first().json.imageData }}",
+            "notes": "={{ $('Build WF3 Payload').first().json.notes }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "submissionId",
+              "displayName": "submissionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "submissionFolderId",
+              "displayName": "submissionFolderId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "consolidatedSpec",
+              "displayName": "consolidatedSpec",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "imageData",
+              "displayName": "imageData",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "notes",
+              "displayName": "notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1248,
+        -176
+      ],
+      "id": "98588b93-9959-4c9d-b4e2-d1cf01e62d47",
+      "name": "Call 'Product Content Creation (WF3)'"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "c2a87017-471e-4e94-8ebd-46146e07f0b5",
+              "leftValue": "={{ $json.noImages }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        192,
+        0
+      ],
+      "id": "1e1bbb04-2620-49c1-b5ed-f06abb793256",
+      "name": "Has Images?"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Expand Image Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expand Image Items": {
+      "main": [
+        [
+          {
+            "node": "Has Images?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Consolidate Image Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Search files and folders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search files and folders": {
+      "main": [
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "Extract a document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract a document": {
+      "main": [
+        [
+          {
+            "node": "Wrap Image Extraction Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wrap Image Extraction Output": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consolidate Image Data": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets – Update submission row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets – Update submission row": {
+      "main": [
+        [
+          {
+            "node": "Build WF3 Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build WF3 Payload": {
+      "main": [
+        [
+          {
+            "node": "Call 'Product Content Creation (WF3)'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Images?": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Consolidate Image Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "id": "YOUR_WF2_ID",
+  "tags": []
+}

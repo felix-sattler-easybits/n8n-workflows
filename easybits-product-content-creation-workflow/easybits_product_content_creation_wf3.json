@@ -1,0 +1,608 @@
+{
+  "name": "Product Content Creation (WF3)",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "submissionId",
+              "type": "any"
+            },
+            {
+              "name": "submissionFolderId",
+              "type": "any"
+            },
+            {
+              "name": "consolidatedSpec",
+              "type": "any"
+            },
+            {
+              "name": "imageData",
+              "type": "any"
+            },
+            {
+              "name": "notes",
+              "type": "any"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "d968397e-2a34-477c-aefd-694dc2585f79",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Product Content Submissions",
+          "cachedResultUrl": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1925989480,
+          "mode": "list",
+          "cachedResultName": "Brand Profiles",
+          "cachedResultUrl": ""
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "brand",
+              "lookupValue": "={{ $json.brandKey }}"
+            }
+          ]
+        },
+        "options": {
+          "returnFirstMatch": true
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        416,
+        0
+      ],
+      "id": "d28c31a1-b4e1-4a34-9a07-e3c967ec9f4d",
+      "name": "Lookup Brand Profile",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const trigger = $input.first().json;\n\n// Pull brand from consolidatedSpec, normalise to lowercase + trim\nconst rawBrand = trigger.consolidatedSpec?.brand || null;\nconst brandKey = rawBrand ? String(rawBrand).toLowerCase().trim() : null;\n\n// Title-case version for display use later (\"samsonite\" → \"Samsonite\")\nconst brandDisplay = rawBrand\n  ? String(rawBrand).trim().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')\n  : null;\n\nreturn [{\n  json: {\n    ...trigger,\n    brandKey: brandKey,\n    brandDisplay: brandDisplay,\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "8ac4f3cc-eda8-4cba-91c5-42b73f32014f",
+      "name": "Normalise Brand"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b4382efc-c8a1-4831-a9db-70ffd00c8da5",
+              "leftValue": "={{ Boolean($json.about_brand) || !($('Normalise Brand').first().json.brandKey && String($('Normalise Brand').first().json.brandKey).trim()) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        624,
+        0
+      ],
+      "id": "be5953ef-fa7e-4e14-9aa2-86872f304444",
+      "name": "IF – Brand Found?"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are writing a brand profile paragraph for an e-commerce product page.\n\nThe brand is: {{ $('Normalise Brand').item.json.brandDisplay }}\n\nWrite a single paragraph of 80 to 120 words that describes this brand for shoppers who may not know it. The paragraph will be used on every product page from this brand, so it must be product-agnostic — do not mention any specific product, model, or feature.\n\nStyle requirements:\n- International English spelling (e.g. \"recognised\", \"travellers\", \"colour\", \"centre\")\n- Warm but professional tone\n- Marketing language is allowed but avoid hype phrases like \"world-class\", \"cutting-edge\", \"revolutionary\"\n- Mention what category of products the brand makes, when it was founded if commonly known, and what it is known for\n- Single paragraph, no bullet points, no headers\n- Do not use any em-dashes — use en-dashes or restructure the sentence instead\n\nReturn only the paragraph itself, no preamble, no quotation marks, no \"Here is the paragraph:\" intro. Just the text.",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        896,
+        64
+      ],
+      "id": "e6f659d9-0006-4d46-a4e5-cc0637ef447a",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        992,
+        272
+      ],
+      "id": "b4de73c4-3b08-4793-8904-d5e0c4ccb426",
+      "name": "Generate About Brand"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Product Content Submissions",
+          "cachedResultUrl": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1925989480,
+          "mode": "list",
+          "cachedResultName": "Brand Profiles",
+          "cachedResultUrl": ""
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "brand": "={{ $('Normalise Brand').item.json.brandKey }}",
+            "about_brand": "={{ $json.text }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "brand",
+              "displayName": "brand",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "about_brand",
+              "displayName": "about_brand",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1248,
+        64
+      ],
+      "id": "08df410d-ebed-4b3d-b44c-aea2f97f0edf",
+      "name": "Save New Brand Profile"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1456,
+        -64
+      ],
+      "id": "c955f281-769e-4ff0-b050-68f67ce283a2",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "// The Merge node gives us one item that contains either the looked-up brand row\n// or the newly-appended brand row. Both have { brand, about_brand }.\nconst merged = $input.first().json;\n\n// Pull everything we need from upstream nodes via .first() (works across merges)\nconst trigger = $('When Executed by Another Workflow').first().json;\nconst normalised = $('Normalise Brand').first().json;\n\nconst spec = trigger.consolidatedSpec || {};\nconst imageData = trigger.imageData || [];\nconst notes = trigger.notes || '';\nconst submissionId = trigger.submissionId;\nconst brandDisplay = normalised.brandDisplay;\nconst aboutBrand = merged.about_brand || '';\n\n// Build a clean image summary the LLM can reason about without drowning in raw JSON\nconst imageSummary = imageData.map((img, i) => {\n  const attrs = img.attributes || {};\n  return {\n    index: img.index,\n    filename: img.filename,\n    view: attrs.view,\n    shot_type: attrs.shot_type,\n    color_visible: attrs.color_visible,\n    features_shown: attrs.features_shown || [],\n    variant_context: attrs.variant_context,\n    has_text_overlay: attrs.has_text_overlay,\n    background_type: attrs.background_type,\n  };\n});\n\nreturn [{\n  json: {\n    submissionId: submissionId,\n    brandDisplay: brandDisplay,\n    aboutBrand: aboutBrand,\n    spec: spec,\n    imageSummary: imageSummary,\n    imageCount: imageSummary.length,\n    notes: notes,\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1664,
+        -64
+      ],
+      "id": "fe03665a-79d9-409a-8daa-8f1f77d03ae1",
+      "name": "Build LLM Context"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1952,
+        128
+      ],
+      "id": "76fa6107-89f2-4653-8ac3-58b346f20980",
+      "name": "Google Gemini Chat Model"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are writing product page content for an e-commerce store selling premium consumer goods. You will receive structured product data and you must return a single JSON object with all content fields populated.\n\n# Product context\n\nBrand: {{ $json.brandDisplay }}\n\nProduct specification (extracted from supplier documents):\n{{ JSON.stringify($json.spec, null, 2) }}\n\nImage analysis (one entry per product photo, including what each photo shows):\n{{ JSON.stringify($json.imageSummary, null, 2) }}\n\nAdditional notes from the merchandiser:\n{{ $json.notes }}\n\n# Voice and style requirements\n\n- International English spelling: \"recognised\", \"travellers\", \"colour\", \"centre\", \"manoeuvrability\"\n- Warm but premium tone. Marketing language is allowed but avoid these worn-out hype phrases: \"world-class\", \"cutting-edge\", \"revolutionary\", \"game-changing\", \"next-level\"\n- Every feature should be paired with what it does for the user, not just named\n- Do not repeat phrases across sections (no \"cuts no corners\" twice in one description)\n- Do not use em-dashes. Use en-dashes or restructure the sentence\n- Preserve trademark symbols exactly as they appear in the spec (Microban®, Aero-Trac™, etc.)\n- Do not invent features or specifications that are not in the spec or image analysis. If you are uncertain, omit rather than fabricate\n\nCRITICAL: Every feature you mention in long_description and features must be either:\n(a) explicitly named in the spec (key_features, materials, etc.), OR\n(b) clearly visible in the image analysis (features_shown across the imageSummary entries)\n\nIf a feature is not in either source, do not include it — even if it would be plausible for this product category. This is non-negotiable. Store staff will verify every claim against the physical product.\n\nCRITICAL: This rule applies to ALL adjectives and modifiers, not just feature names. If the source says \"telescopic handle\", you may write \"telescopic handle\" but not \"multi-stage telescopic handle\", \"ergonomic telescopic handle\", or \"premium telescopic handle\". Strip invented qualifiers. The same applies to wheels, locks, fabric, materials, and every other product element.\n\n# Output schema\n\nReturn a single JSON object with exactly these fields. No preamble, no markdown code fences, no explanation — only the JSON.\n\n{\n  \"title\": \"Product title, 50-70 characters. Format: '{Brand} {Product Name} {Distinguishing Variant}'. The Distinguishing Variant must be drawn from these in priority order: (1) colour visible in images, (2) size from spec, (3) gender from spec (for apparel), (4) collection name. Do NOT use material as the distinguisher unless none of the above are available. Examples: 'Samsonite Streamlite Spinner 55cm Black', 'Luke Lineker Tee Cream Ecru', 'Samsonite C-Lite Spinner Metallic Green'.\",\n  \"short_description\": \"One to two sentences, 120-200 characters total. Used on product cards and category pages. Hook the reader with the main benefit.\",\n  \"long_description\": \"150-300 word flowing prose. Feature-benefit narrative. No bullets, no headers. This sits at the top of the product page and is the main marketing copy.\",\n  \"meta_title\": \"SEO title tag. HARD LIMIT: must be 60 characters or fewer, including spaces. Count every character before returning. If your draft is longer, rewrite it shorter rather than truncating. May be identical to title if title is under 60 chars. Do not pad with filler like '| Travel' or '| Buy Now'.\",\n  \"meta_description\": \"SEO meta description. HARD LIMIT: must be 160 characters or fewer, including spaces. Count every character before returning. If your draft is longer, rewrite it shorter rather than truncating. A compelling reason to click through from search results.\",\n  \"features\": [\n    \"Array of 5-10 key feature strings. Each is a short phrase (3-8 words). Examples: 'Aero-Trac™ Whirl Suspension Wheels', 'TSA 3-digit combination lock', 'Microban® antimicrobial treated lining'. These will be displayed as a bulleted spec list.\"\n  ],\n  \"tags\": [\n    \"Array of 5-10 lowercase single-word or two-word tags for search and filtering. Examples: 'luggage', 'spinner', 'samsonite', 'travel', 'carry-on', 'four-wheel'\"\n  ],\n  \"attributes\": {\n    \"color\": \"primary colour as a single word or short phrase, e.g. 'black' or 'navy blue'\",\n    \"material\": \"primary material, e.g. 'polycarbonate' or 'cotton'\",\n    \"size\": \"primary size dimension if applicable, e.g. '55cm', 'medium', 'L'\",\n    \"weight\": \"weight if known, with unit, e.g. '2.8 kg'\",\n    \"gender\": \"target gender for apparel and accessories. One of: 'Men', 'Women', 'Unisex', 'Boys', 'Girls'. Use null for non-apparel categories like luggage, homeware, or electronics.\",\n    \"model_number\": \"model number from the spec if present, otherwise null\"\n  },\n  \"collection\": \"If the product_name follows a 'Brand Collection ModelDescriptor' pattern (e.g. 'Streamlite Spinner Cabin' means the collection is 'Streamlite'), infer the collection name. Otherwise null.\",\n\"care_instructions\": [\n    \"Array of care instruction strings for apparel and fabric items. Each entry is a short phrase such as 'Hand wash', 'Do not bleach', 'Do not tumble dry', 'Machine wash cold', 'Do not dry clean', 'Iron on low heat'. Return an empty array for non-fabric items like rigid luggage shells, electronics, or homeware. Only include instructions that are present in the spec or notes — do not invent care guidance.\"\n  ],\n  \"image_alt_text\": [\n    {\n      \"index\": 0,\n      \"filename\": \"(use the exact filename from imageSummary)\",\n      \"alt_text\": \"Descriptive alt text for accessibility and SEO. Format: '{Product name} in {colour}, {view} view'. Tailor each one to what that specific image shows based on the image analysis. Max 125 characters.\"\n    }\n  ]\n}\n\nReturn one image_alt_text entry per image in imageSummary, in the same order.\n\nReturn only the JSON object. No markdown fences, no commentary.",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        1872,
+        -64
+      ],
+      "id": "d6f0fb00-5f67-4bd9-a110-7eb8f8a11774",
+      "name": "Generate Content"
+    },
+    {
+      "parameters": {
+        "jsCode": "const llmOutput = $input.first().json;\n\n// Gemini's response field is typically \"text\" in Basic LLM Chain\nlet raw = llmOutput.text || llmOutput.output || llmOutput.response || '';\n\nif (!raw) {\n  throw new Error('No text returned from Generate Content node. Got: ' + JSON.stringify(llmOutput));\n}\n\n// Strip markdown code fences if Gemini included them\nraw = raw.trim();\nif (raw.startsWith('```json')) {\n  raw = raw.slice(7).trim();\n} else if (raw.startsWith('```')) {\n  raw = raw.slice(3).trim();\n}\nif (raw.endsWith('```')) {\n  raw = raw.slice(0, -3).trim();\n}\n\n// Parse\nlet parsed;\ntry {\n  parsed = JSON.parse(raw);\n} catch (e) {\n  throw new Error('Failed to parse LLM output as JSON: ' + e.message + '\\n\\nRaw output:\\n' + raw);\n}\n\n// Validate required fields\nconst required = ['title', 'short_description', 'long_description', 'meta_title', 'meta_description', 'features', 'tags', 'attributes', 'image_alt_text'];\nconst missing = required.filter(f => !(f in parsed));\nif (missing.length > 0) {\n  throw new Error('LLM output missing required fields: ' + missing.join(', '));\n}\n\n// Pull through context for the next node\nconst context = $('Build LLM Context').first().json;\n\nreturn [{\n  json: {\n    submissionId: context.submissionId,\n    aboutBrand: context.aboutBrand,\n    content: parsed,\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2224,
+        -64
+      ],
+      "id": "1e35d4f8-0de8-465d-9e14-6b699a9b3fb8",
+      "name": "Parse Content JSON"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst content = { ...input.content };\n\n// Pull aboutBrand defensively\nconst aboutBrand = input.aboutBrand \n  || $('Build LLM Context').first().json.aboutBrand \n  || '';\n\nconst brandDisplay = $('Normalise Brand').first().json.brandDisplay || 'the brand';\n\n// Append about_brand to long_description\nif (aboutBrand && content.long_description) {\n  content.long_description = content.long_description.trim() \n    + '\\n\\nAbout ' + brandDisplay + ':\\n\\n' \n    + aboutBrand;\n}\n\n// Pass variant arrays through directly from spec - no LLM involvement\n// This guarantees we never lose sizes/colors that the LLM would otherwise filter\nconst spec = $('Build LLM Context').first().json.spec || {};\ncontent.available_sizes = Array.isArray(spec.size_options) ? spec.size_options : [];\ncontent.available_colors = Array.isArray(spec.color_options) ? spec.color_options : [];\n\nreturn [{\n  json: {\n    submissionId: input.submissionId,\n    content: content,\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2432,
+        -64
+      ],
+      "id": "20a9f36e-be94-4eed-bba5-7fb8e6b1fb10",
+      "name": "Append Brand Boilerplate"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Product Content Submissions",
+          "cachedResultUrl": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Submissions",
+          "cachedResultUrl": ""
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "submission_id": "={{ $json.submissionId }}",
+            "content_data": "={{ JSON.stringify($json.content) }}",
+            "status": "content_drafted"
+          },
+          "matchingColumns": [
+            "submission_id"
+          ],
+          "schema": [
+            {
+              "id": "submission_id",
+              "displayName": "submission_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "received_at",
+              "displayName": "received_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "sku_id",
+              "displayName": "sku_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "brand",
+              "displayName": "brand",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "notes",
+              "displayName": "notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "file_count",
+              "displayName": "file_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "spec_data",
+              "displayName": "spec_data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "image_data",
+              "displayName": "image_data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "content_data",
+              "displayName": "content_data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2640,
+        -64
+      ],
+      "id": "34d4c5ed-256e-4c4c-9f0f-c3ed402e9ce3",
+      "name": "Save Content Draft",
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Normalise Brand",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalise Brand": {
+      "main": [
+        [
+          {
+            "node": "Lookup Brand Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Brand Profile": {
+      "main": [
+        [
+          {
+            "node": "IF – Brand Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate About Brand": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF – Brand Found?": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Save New Brand Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save New Brand Profile": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Build LLM Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build LLM Context": {
+      "main": [
+        [
+          {
+            "node": "Generate Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate Content",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Content": {
+      "main": [
+        [
+          {
+            "node": "Parse Content JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Content JSON": {
+      "main": [
+        [
+          {
+            "node": "Append Brand Boilerplate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append Brand Boilerplate": {
+      "main": [
+        [
+          {
+            "node": "Save Content Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "id": "YOUR_WF3_ID",
+  "tags": []
+}

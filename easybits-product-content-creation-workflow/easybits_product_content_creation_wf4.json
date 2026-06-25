@@ -1,0 +1,139 @@
+{
+  "name": "Product Content Creation (WF4) – Polling",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "product-status",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "b8ef498b-6c99-429f-9a6c-c1186fb0f80e",
+      "name": "Webhook"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Product Content Submissions",
+          "cachedResultUrl": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Submissions",
+          "cachedResultUrl": ""
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "submission_id",
+              "lookupValue": "={{ $json.query.submissionId }}"
+            }
+          ]
+        },
+        "options": {
+          "returnFirstMatch": true
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        208,
+        0
+      ],
+      "id": "bfe89677-287f-47d7-b722-b261085e90d0",
+      "name": "Read Submission Row"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\n// Handle no-match-found case\nif (!input.submission_id) {\n  return [{\n    json: {\n      found: false,\n      error: 'Submission not found',\n    },\n  }];\n}\n\nconst status = input.status || 'data received';\n\n// Parse the content_data JSON string if present\nlet contentData = null;\nif (input.content_data) {\n  try {\n    contentData = typeof input.content_data === 'string' \n      ? JSON.parse(input.content_data) \n      : input.content_data;\n  } catch (e) {\n    // If JSON parsing fails, return raw string\n    contentData = input.content_data;\n  }\n}\n\n// Parse spec_data and image_data similarly (for completeness/debugging)\nlet specData = null;\nif (input.spec_data) {\n  try {\n    specData = typeof input.spec_data === 'string' \n      ? JSON.parse(input.spec_data) \n      : input.spec_data;\n  } catch (e) {\n    specData = input.spec_data;\n  }\n}\n\nlet imageData = null;\nif (input.image_data) {\n  try {\n    imageData = typeof input.image_data === 'string' \n      ? JSON.parse(input.image_data) \n      : input.image_data;\n  } catch (e) {\n    imageData = input.image_data;\n  }\n}\n\n// Status order for the progress checklist\nconst statusOrder = ['data received', 'specs extracted', 'images analyzed', 'content drafted'];\nconst currentIndex = statusOrder.indexOf(status);\n\nreturn [{\n  json: {\n    found: true,\n    submissionId: input.submission_id,\n    receivedAt: input.received_at,\n    skuId: input.sku_id,\n    category: input.category,\n    brand: input.brand,\n    notes: input.notes,\n    fileCount: input.file_count,\n    status: status,\n    statusIndex: currentIndex,\n    isComplete: status === 'content drafted',\n    specData: specData,\n    imageData: imageData,\n    contentData: contentData,\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "4b17919d-dad9-4b57-950c-ce70e8c76b4d",
+      "name": "Format Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        624,
+        0
+      ],
+      "id": "170e8f10-c1c6-4c45-b802-12efa21e9658",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Read Submission Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Submission Row": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "id": "YOUR_WF4_ID",
+  "tags": []
+}
