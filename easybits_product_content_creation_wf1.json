@@ -1,0 +1,1085 @@
+{
+  "name": "Product Content Creation (WF1)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "product-intake",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*",
+          "rawBody": false
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -224,
+        0
+      ],
+      "id": "349cbd08-ba7b-4d57-a0dc-b847307e75a5",
+      "name": "Webhook"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"submissionId\": \"{{ $json.submissionId }}\",\n  \"status\": \"received\",\n  \"receivedAt\": \"{{ $json.receivedAt }}\",\n  \"message\": \"Submission accepted. Spec extraction in progress.\"\n}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        192,
+        0
+      ],
+      "id": "c75f9ebd-965d-4a46-a7de-125690705007",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Product Content Submissions",
+          "cachedResultUrl": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Submissions",
+          "cachedResultUrl": ""
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "submission_id": "={{ $json.submissionId }}",
+            "received_at": "={{ $json.receivedAt }}",
+            "sku_id": "={{ $json.skuId }}",
+            "category": "={{ $json.category }}",
+            "brand": "={{ $json.brand }}",
+            "notes": "={{ $json.notes }}",
+            "file_count": "={{ $json.fileCount }}",
+            "status": "received"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "submission_id",
+              "displayName": "submission_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "received_at",
+              "displayName": "received_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "sku_id",
+              "displayName": "sku_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "brand",
+              "displayName": "brand",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "notes",
+              "displayName": "notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "file_count",
+              "displayName": "file_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "spec_data",
+              "displayName": "spec_data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "image_data",
+              "displayName": "image_data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "content_data",
+              "displayName": "content_data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        400,
+        0
+      ],
+      "id": "a43a0df7-0305-453b-9075-43020b9b5953",
+      "name": "Append row in sheet"
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "name": "={{ $('Parse Submission').item.json.submissionId }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "YOUR_DRIVE_FOLDER_ID",
+          "mode": "list",
+          "cachedResultName": "Product Content Submissions",
+          "cachedResultUrl": ""
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        608,
+        0
+      ],
+      "id": "0c64bd29-be61-43ec-a1d0-d33ddd099e8a",
+      "name": "Create folder"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pull the original submission data from the Code node (Node 2)\nconst submission = $('Parse Submission').item.json;\nconst binary = $('Parse Submission').item.binary || {};\n\n// Create one output item per file, each carrying its own binary\nconst items = [];\nfor (const [key, fileData] of Object.entries(binary)) {\n  items.push({\n    json: {\n      submissionId: submission.submissionId,\n      binaryKey: key,\n      filename: fileData.fileName || 'unnamed',\n      mimeType: fileData.mimeType,\n    },\n    binary: {\n      data: fileData,\n    },\n    pairedItem: { item: 0 },\n  });\n}\n\n// If no files came in, emit a single marker item so the run continues\nif (items.length === 0) {\n  return [{\n    json: {\n      submissionId: submission.submissionId,\n      notes: submission.notes || '',\n      noFiles: true,\n    },\n    pairedItem: { item: 0 },\n  }];\n}\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        816,
+        0
+      ],
+      "id": "b82f2afe-d30f-40dc-ab7f-755057d21799",
+      "name": "Code – Expand binaries into items"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1248,
+        -16
+      ],
+      "id": "4ac77a27-7e56-45a2-9e9a-0052f36df8a1",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "name": "={{ $json.filename }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $('Create folder').item.json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1504,
+        144
+      ],
+      "id": "714fb964-d0bb-41a4-a19b-680c61369dcc",
+      "name": "Upload file"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "extractor",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "745fd6ae-9569-4505-b7f9-b43d9724ab3a"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Extractor"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "2c0991fc-2e90-4419-9100-d2cc7f7eaa84",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "excel",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Excel"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "07359b08-66f6-45fa-a7ef-1fc8b0e772f0",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "summary",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Summary"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "none"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1712,
+        -112
+      ],
+      "id": "b0c7ed86-c2a8-40d6-81a3-3486ed679e8d",
+      "name": "Switch"
+    },
+    {
+      "parameters": {},
+      "type": "@easybits/n8n-nodes-extractor.easybitsExtractor",
+      "typeVersion": 2,
+      "position": [
+        1952,
+        -288
+      ],
+      "id": "104f5185-3872-4ef3-985e-d666fc53b417",
+      "name": "Extract a document"
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "options": {
+          "range": "",
+          "readAsString": true,
+          "sheetName": ""
+        }
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        1952,
+        -96
+      ],
+      "id": "02bcc2b6-6763-4c16-b193-fd439923a9c5",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const extractorOutput = $input.item.json;\n\n// The Extractor wraps results in a 'data' envelope\nconst rawSpec = extractorOutput.data || {};\n\n// Helper: convert the Extractor's \"null\" string into actual null\nfunction cleanNull(value) {\n  if (value === 'null' || value === null || value === undefined || value === '') {\n    return null;\n  }\n  return value;\n}\n\n// Helper: clean array fields (catch \"null\" string inside arrays, drop empties)\nfunction cleanArray(value) {\n  if (!Array.isArray(value)) return [];\n  return value\n    .filter((v) => v !== 'null' && v !== null && v !== undefined && v !== '')\n    .map((v) => String(v).trim());\n}\n\n// Normalize the spec object: strings get cleanNull, arrays get cleanArray\nconst spec = {\n  product_name: cleanNull(rawSpec.product_name),\n  brand: cleanNull(rawSpec.brand),\n  short_description: cleanNull(rawSpec.short_description),\n  key_features: cleanArray(rawSpec.key_features),\n  materials: cleanArray(rawSpec.materials),\n  dimensions: cleanNull(rawSpec.dimensions),\n  weight: cleanNull(rawSpec.weight),\n  color_options: cleanArray(rawSpec.color_options),\n  size_options: cleanArray(rawSpec.size_options),\n  model_number: cleanNull(rawSpec.model_number),\n};\n\nreturn {\n  json: {\n    submissionId: $('Route Files').item.json.submissionId,\n    source: 'extractor',\n    sourceFilename: $('Route Files').item.json.filename || 'unknown',\n    data: spec,\n  },\n  pairedItem: $input.item.pairedItem,\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        -288
+      ],
+      "id": "853f3f2c-fe81-44bd-b740-8207a0ab1256",
+      "name": "Wrap Extractor Output"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const row = $input.item.json;\n\n// Helper: normalize column header lookup (case-insensitive, trim spaces, underscores or hyphens)\nfunction getField(row, ...possibleNames) {\n  const normalize = (s) => s.toLowerCase().replace(/[\\s_-]+/g, '');\n  const rowKeys = Object.keys(row);\n  for (const name of possibleNames) {\n    const target = normalize(name);\n    const match = rowKeys.find((k) => normalize(k) === target);\n    if (match && row[match] !== null && row[match] !== undefined && row[match] !== '') {\n      return String(row[match]).trim();\n    }\n  }\n  return null;\n}\n\n// Helper: split a comma-separated string into a clean array\nfunction splitToArray(value) {\n  if (!value) return [];\n  return value\n    .split(/[,;|]/)\n    .map((s) => s.trim())\n    .filter((s) => s.length > 0);\n}\n\n// Map Excel columns to spec schema, tolerating common header variations\nconst spec = {\n  product_name: getField(row, 'product_name', 'product name', 'name', 'title'),\n  brand: getField(row, 'brand', 'manufacturer', 'make'),\n  short_description: getField(row, 'short_description', 'description', 'summary'),\n  key_features: splitToArray(getField(row, 'key_features', 'features', 'highlights')),\n  materials: splitToArray(getField(row, 'materials', 'material', 'composition')),\n  dimensions: getField(row, 'dimensions', 'size', 'measurements'),\n  weight: getField(row, 'weight', 'mass'),\n  color_options: splitToArray(getField(row, 'color_options', 'colors', 'colour_options', 'colours')),\n  size_options: splitToArray(getField(row, 'size_options', 'sizes', 'variants')),\n  model_number: getField(row, 'model_number', 'model', 'sku', 'product_code', 'item_code'),\n};\n\nreturn {\n  json: {\n    submissionId: $('Route Files').item.json.submissionId,\n    source: 'excel',\n    sourceFilename: $('Route Files').item.json.filename || 'unknown.xlsx',\n    data: spec,\n  },\n  pairedItem: $input.item.pairedItem,\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        -96
+      ],
+      "id": "3ac3498d-5de8-4393-a1a0-fdd2bbbcf152",
+      "name": "Map Excel to Spec"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2416,
+        -192
+      ],
+      "id": "46b51683-b5a0-44bc-a03a-01e8dbadd877",
+      "name": "Merge – Combine Extractor and Excel branches"
+    },
+    {
+      "parameters": {
+        "jsCode": "const allSpecItems = $input.all();\n\n// If nothing came through (no spec files at all), exit gracefully\nif (allSpecItems.length === 0) {\n  return [{\n    json: {\n      submissionId: $('Parse Submission').item.json.submissionId,\n      consolidatedSpec: null,\n      sourceMap: {},\n      sourceCount: 0,\n      warning: 'no_spec_files_received',\n    },\n    pairedItem: { item: 0 },\n  }];\n}\n\n// Initialize the consolidated spec — all fields start as null/empty\nconst consolidated = {\n  product_name: null,\n  brand: null,\n  short_description: null,\n  key_features: [],\n  materials: [],\n  dimensions: null,\n  weight: null,\n  color_options: [],\n  size_options: [],\n  model_number: null,\n};\n\n// Track which source filled which field (for traceability)\nconst sourceMap = {};\n\n// Priority: Extractor results take precedence over Excel for scalar fields\n// (Extractor reads PDFs which typically have more authoritative spec data)\n// Arrays get unioned across all sources, then deduplicated\nconst sortedItems = allSpecItems.slice().sort((a, b) => {\n  const aPriority = a.json.source === 'extractor' ? 0 : 1;\n  const bPriority = b.json.source === 'extractor' ? 0 : 1;\n  return aPriority - bPriority;\n});\n\n// Walk through each source spec\nfor (const item of sortedItems) {\n  const spec = item.json.data || {};\n  const sourceLabel = `${item.json.source}:${item.json.sourceFilename}`;\n\n  // Scalar fields: first non-null wins (Extractor runs first due to sort)\n  const scalarFields = ['product_name', 'brand', 'short_description', 'dimensions', 'weight', 'model_number'];\n  for (const field of scalarFields) {\n    if (consolidated[field] === null && spec[field] !== null && spec[field] !== undefined) {\n      consolidated[field] = spec[field];\n      sourceMap[field] = sourceLabel;\n    }\n  }\n\n  // Array fields: union across all sources\n  const arrayFields = ['key_features', 'materials', 'color_options', 'size_options'];\n  for (const field of arrayFields) {\n    if (Array.isArray(spec[field]) && spec[field].length > 0) {\n      consolidated[field] = [...consolidated[field], ...spec[field]];\n      // Track contributors\n      if (!sourceMap[field]) sourceMap[field] = [];\n      sourceMap[field].push(sourceLabel);\n    }\n  }\n}\n\n// Deduplicate arrays (case-insensitive)\nfor (const field of ['key_features', 'materials', 'color_options', 'size_options']) {\n  const seen = new Set();\n  consolidated[field] = consolidated[field].filter((v) => {\n    const lower = v.toLowerCase();\n    if (seen.has(lower)) return false;\n    seen.add(lower);\n    return true;\n  });\n}\n\nreturn [{\n  json: {\n    submissionId: $('Parse Submission').item.json.submissionId,\n    consolidatedSpec: consolidated,\n    sourceMap: sourceMap,\n    sourceCount: allSpecItems.length,\n  },\n  pairedItem: { item: 0 },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2624,
+        -192
+      ],
+      "id": "03a98977-db4a-4a05-adc0-2672bc3224f5",
+      "name": "Consolidate Specs"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Product Content Submissions",
+          "cachedResultUrl": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Submissions",
+          "cachedResultUrl": ""
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "submission_id": "={{ $json.submissionId }}",
+            "status": "specs_extracted",
+            "spec_data": "={{ JSON.stringify($json.consolidatedSpec) }}",
+            "brand": "={{ ($('Parse Submission').first().json.brand || '').trim() || ($('Consolidate Specs').isExecuted ? ($('Consolidate Specs').first().json.consolidatedSpec.brand || '') : '') }}"
+          },
+          "matchingColumns": [
+            "submission_id"
+          ],
+          "schema": [
+            {
+              "id": "submission_id",
+              "displayName": "submission_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "received_at",
+              "displayName": "received_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "sku_id",
+              "displayName": "sku_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "brand",
+              "displayName": "brand",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "notes",
+              "displayName": "notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "file_count",
+              "displayName": "file_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "spec_data",
+              "displayName": "spec_data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "image_data",
+              "displayName": "image_data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "content_data",
+              "displayName": "content_data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2832,
+        -192
+      ],
+      "id": "5bf5e064-ee9d-438c-b2f3-2572f8236681",
+      "name": "Update row in sheet"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {
+          "includeUnpaired": true
+        }
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        3072,
+        -176
+      ],
+      "id": "7cb501d6-f0bb-438a-957e-408050a78371",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "YOUR_WF2_ID",
+          "mode": "list",
+          "cachedResultUrl": "",
+          "cachedResultName": "Product Content Creation (WF2)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "submissionId": "={{ $json.submissionId }}",
+            "productImages": "={{ $json.productImages}}",
+            "consolidatedSpec": "={{ $json.consolidatedSpec }}",
+            "notes": "={{ $json.notes }}",
+            "submissionFolderId": "={{ $json.submissionFolderId }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "submissionId",
+              "displayName": "submissionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "productImages",
+              "displayName": "productImages",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "array",
+              "removed": false
+            },
+            {
+              "id": "consolidatedSpec",
+              "displayName": "consolidatedSpec",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object",
+              "removed": false
+            },
+            {
+              "id": "notes",
+              "displayName": "notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "submissionFolderId",
+              "displayName": "submissionFolderId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        3760,
+        -176
+      ],
+      "id": "ded5d037-db6a-4aeb-9e41-3994321a0c2e",
+      "name": "Execute Sub-workflow"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "fe872c4b-78d8-41b2-8f6c-321f70ed88c7",
+              "name": "submissionId",
+              "value": "={{ $json.submissionId }}",
+              "type": "string"
+            },
+            {
+              "id": "dd4b4ea9-029c-4847-b91a-0d5339cde2cb",
+              "name": "productImages",
+              "value": "={{ $json.productImages || [] }}",
+              "type": "array"
+            },
+            {
+              "id": "128eaba2-1d40-448b-ad27-67207ce1c4ae",
+              "name": "consolidatedSpec",
+              "value": "={{ $json.consolidatedSpec }}",
+              "type": "object"
+            },
+            {
+              "id": "dad77b64-6b58-42e0-818a-27dd8a4b1ea9",
+              "name": "notes",
+              "value": "={{ $json.notes }}",
+              "type": "string"
+            },
+            {
+              "id": "6204dd7f-c1e0-4656-8361-87b1f79b800d",
+              "name": "submissionFolderId",
+              "value": "={{ $('Create folder').first().json.id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3520,
+        -176
+      ],
+      "id": "d822152a-d424-4ea4-ae4a-571e98afd5c9",
+      "name": "Build WF2 Payload"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Grab the incoming webhook data\nconst webhookData = $input.first().json;\nconst body = webhookData.body || {};\nconst binary = $input.first().binary || {};\n\n// Generate a unique submission ID\n// Format: SUB-{timestamp}-{random4} — easy to read and sort\nconst timestamp = new Date();\nconst dateStr = timestamp.toISOString().slice(0, 10).replace(/-/g, '');\nconst timeStr = timestamp.toISOString().slice(11, 19).replace(/:/g, '');\nconst randomSuffix = Math.random().toString(36).slice(2, 6).toUpperCase();\nconst submissionId = `SUB-${dateStr}-${timeStr}-${randomSuffix}`;\n\n// Take inventory of uploaded files\n// Binary properties come in as keys on the binary object\nconst fileInventory = [];\nfor (const [key, fileData] of Object.entries(binary)) {\n  fileInventory.push({\n    binaryKey: key,\n    filename: fileData.fileName || 'unnamed',\n    mimeType: fileData.mimeType || 'unknown',\n    fileSize: fileData.fileSize || 0,\n  });\n}\n\n// Build the clean, flattened output\nreturn {\n  json: {\n    submissionId: submissionId,\n    receivedAt: timestamp.toISOString(),\n    skuId: body.sku_id || null,\n    category: body.category || null,\n    brand: body.brand || null,\n    notes: body.notes || null,\n    fileCount: fileInventory.length,\n    files: fileInventory,\n  },\n  binary: binary,\n  pairedItem: { item: 0 },\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16,
+        0
+      ],
+      "id": "f42ac37a-1d84-4d17-9e74-fed7b5b89400",
+      "name": "Parse Submission"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pull the original submission data and binaries from Node 2\nconst submission = $('Parse Submission').item.json;\nconst binary = $('Parse Submission').item.binary || {};\n\n// Define routing rules by MIME type\nconst EXTRACTOR_MIMES = [\n  'application/pdf',\n  'image/png',\n  'image/jpeg',\n  'image/jpg',\n];\nconst EXCEL_MIMES = [\n  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',\n  'application/vnd.ms-excel',\n  'text/csv',\n];\n\n// Buckets we'll fill as we walk the binaries\nconst specFilesForExtractor = [];\nconst specFilesForExcel = [];\nconst productImages = [];\n\nfor (const [key, fileData] of Object.entries(binary)) {\n  const mime = (fileData.mimeType || '').toLowerCase();\n  const filename = fileData.fileName || 'unnamed';\n  const isProductImage = key.startsWith('product_images');\n  const isSpecFile = key.startsWith('spec_files');\n\n  const fileMeta = {\n    binaryKey: key,\n    filename: filename,\n    mimeType: mime,\n  };\n\n  if (isProductImage) {\n    // Product images go to Workflow 2 — we just note them\n    productImages.push(fileMeta);\n  } else if (isSpecFile) {\n    // Spec files split by type\n    if (EXTRACTOR_MIMES.includes(mime)) {\n      specFilesForExtractor.push(fileMeta);\n    } else if (EXCEL_MIMES.includes(mime)) {\n      specFilesForExcel.push(fileMeta);\n    } else {\n      // Unknown spec file type — log but don't route\n      specFilesForExtractor.push({ ...fileMeta, warning: 'unknown_mime' });\n    }\n  }\n}\n\n// Build output items: one item per file that needs processing in W1\n// Each carries its own binary so downstream branches can act on it\nconst outputItems = [];\n\n// Extractor branch items\nfor (const file of specFilesForExtractor) {\n  outputItems.push({\n    json: {\n      submissionId: submission.submissionId,\n      route: 'extractor',\n      filename: file.filename,\n      mimeType: file.mimeType,\n    },\n    binary: {\n      data: binary[file.binaryKey],\n    },\n    pairedItem: { item: 0 },\n  });\n}\n\n// Excel branch items\nfor (const file of specFilesForExcel) {\n  outputItems.push({\n    json: {\n      submissionId: submission.submissionId,\n      route: 'excel',\n      filename: file.filename,\n      mimeType: file.mimeType,\n    },\n    binary: {\n      data: binary[file.binaryKey],\n    },\n    pairedItem: { item: 0 },\n  });\n}\n\n// Also output a summary item so we know what was routed where\n// We'll use this in the consolidation step later\noutputItems.push({\n  json: {\n    submissionId: submission.submissionId,\n    route: 'summary',\n    extractorCount: specFilesForExtractor.length,\n    excelCount: specFilesForExcel.length,\n    productImageCount: productImages.length,\n    productImages: productImages,\n  },\n  pairedItem: { item: 0 },\n});\n\nreturn outputItems;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1504,
+        -96
+      ],
+      "id": "299eb7b7-1bf8-4e38-9545-463333e4f37b",
+      "name": "Route Files"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\nconst formBrand = String($('Parse Submission').first().json.brand || '').trim();\nconst specRan = $('Consolidate Specs').isExecuted;\nconst spec = specRan ? $('Consolidate Specs').first().json.consolidatedSpec || {} : {};\nconst extractedBrand = spec.brand ? String(spec.brand).trim() : '';\n\nconst finalBrand = formBrand || extractedBrand || null;\n\nreturn [{\n  json: {\n    ...input,\n    consolidatedSpec: {\n      ...spec,\n      brand: finalBrand,\n      product_name: spec.product_name || '',\n      key_features: spec.key_features || [],\n      materials: spec.materials || [],\n      color_options: spec.color_options || [],\n      size_options: spec.size_options || [],\n    },\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3296,
+        -176
+      ],
+      "id": "488332e7-d746-4a60-995a-8ff94476a167",
+      "name": "Resolve Brand"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "d1521b54-d88d-4035-ae01-8f41a00bae23",
+              "leftValue": "={{ !$json.noFiles }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1024,
+        0
+      ],
+      "id": "cd344eea-203b-4d4c-b8c4-2915e64f98f2",
+      "name": "Has Files?"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Submission",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Webhook": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Create folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create folder": {
+      "main": [
+        [
+          {
+            "node": "Code – Expand binaries into items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code – Expand binaries into items": {
+      "main": [
+        [
+          {
+            "node": "Has Files?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Route Files",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Upload file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload file": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Extract a document",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Map Excel to Spec",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract a document": {
+      "main": [
+        [
+          {
+            "node": "Wrap Extractor Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Excel to Spec": {
+      "main": [
+        [
+          {
+            "node": "Merge – Combine Extractor and Excel branches",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Wrap Extractor Output": {
+      "main": [
+        [
+          {
+            "node": "Merge – Combine Extractor and Excel branches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge – Combine Extractor and Excel branches": {
+      "main": [
+        [
+          {
+            "node": "Consolidate Specs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consolidate Specs": {
+      "main": [
+        [
+          {
+            "node": "Update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Resolve Brand",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build WF2 Payload": {
+      "main": [
+        [
+          {
+            "node": "Execute Sub-workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Submission": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Files": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Brand": {
+      "main": [
+        [
+          {
+            "node": "Build WF2 Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Files?": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resolve Brand",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "id": "YOUR_WF1_ID",
+  "tags": []
+}
