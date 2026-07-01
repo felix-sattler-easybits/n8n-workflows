@@ -1,5 +1,5 @@
 {
-  "name": "Purchase Order Extractor",
+  "name": "Purchase Order Extractor powered by easybits",
   "nodes": [
     {
       "parameters": {
