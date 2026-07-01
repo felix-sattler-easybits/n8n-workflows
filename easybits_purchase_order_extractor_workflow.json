@@ -1,0 +1,468 @@
+{
+  "name": "Purchase Order Extractor",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Purchase Order Intake",
+        "formDescription": "Upload one or more purchase order PDFs to extract line items.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Purchase Order PDF",
+              "fieldType": "file",
+              "acceptFileTypes": ".pdf",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.5,
+      "position": [
+        0,
+        0
+      ],
+      "id": "205d7945-1700-40f6-b240-2479d214ca3b",
+      "name": "On form submission"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        544,
+        0
+      ],
+      "id": "00b83cc9-09e7-47c5-8dea-9a097d09a25b",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {},
+      "type": "@easybits/n8n-nodes-extractor.easybitsExtractor",
+      "typeVersion": 2,
+      "position": [
+        816,
+        240
+      ],
+      "id": "05beaab4-67eb-48e8-9d12-d6d8d0447454",
+      "name": "Extract: PO Data",
+      "credentials": {
+        "easybitsExtractorApi": {
+          "id": "YOUR_EASYBITS_CREDENTIAL_ID",
+          "name": "YOUR_EASYBITS_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const isMissing = (v) => {\n  if (v === null || v === undefined) return true;\n  const s = String(v).trim().toLowerCase();\n  return s === '' || s === 'null';\n};\nconst clean = (v) => (isMissing(v) ? '' : v);\n\nconst fileName = $('Loop Over Items').first().json.fileName || 'Unknown document';\n\nconst sd = $getWorkflowStaticData('global');\nif (!Array.isArray(sd.flags)) sd.flags = [];\n\nconst rows = [];\n\nfor (const item of $input.all()) {\n  const po = item.json.data || {};\n  const articles = Array.isArray(po.articles) ? po.articles : [];\n\n  // --- per-document flagging ---\n  const missingHeader = [];\n  const headerChecks = {\n    'Mark For': po.mark_for,\n    'PO Number': po.po_number,\n    'PO Date': po.po_date,\n    'Delivery Date': po.delivery_date,\n    'PR Number': po.pr_number,\n    // Reference No. excluded on purpose - blank on most POs\n  };\n  for (const [label, val] of Object.entries(headerChecks)) {\n    if (isMissing(val)) missingHeader.push(label);\n  }\n\n  const badArticles = [];\n  if (articles.length === 0) {\n    badArticles.push('no articles extracted');\n  } else {\n    articles.forEach((a, i) => {\n      const miss = [];\n      if (isMissing(a.article)) miss.push('name');\n      if (isMissing(a.unit)) miss.push('unit');\n      if (isMissing(a.quantity)) miss.push('quantity');\n      if (miss.length) badArticles.push(`row ${i + 1} (${miss.join(', ')})`);\n    });\n  }\n\n  if (missingHeader.length || badArticles.length) {\n    sd.flags.push({ document: fileName, missingHeader, badArticles });\n  }\n\n  // --- build sheet rows ---\n  for (const a of articles) {\n    rows.push({\n      json: {\n        'Document Name': fileName,\n        'PO Number': clean(po.po_number),\n        'PO Date': clean(po.po_date),\n        'Delivery Date': clean(po.delivery_date),\n        'Mark For': clean(po.mark_for),\n        'PR Number': clean(po.pr_number),\n        'Reference No.': clean(po.reference_no),\n        'Article': clean(a.article),\n        'Unit': clean(a.unit),\n        'Quantity': clean(a.quantity),\n      },\n    });\n  }\n}\n\nreturn rows;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1088,
+        240
+      ],
+      "id": "b7a6a93d-f724-415d-a18c-fe0df800ed9c",
+      "name": "Build: Article Rows"
+    },
+    {
+      "parameters": {
+        "jsCode": "const sd = $getWorkflowStaticData('global');\nsd.flags = [];\n\nconst out = [];\n\nfor (const item of $input.all()) {\n  const bin = item.binary || {};\n  for (const key of Object.keys(bin)) {\n    out.push({\n      json: { fileName: bin[key].fileName || key },\n      binary: { data: bin[key] },\n    });\n  }\n}\n\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        0
+      ],
+      "id": "6e1a1786-8646-486b-b3bb-435a5cf8795c",
+      "name": "Prepare: Split PDFs"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sheet1",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "PO Number",
+              "displayName": "PO Number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "PO Date",
+              "displayName": "PO Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Delivery Date",
+              "displayName": "Delivery Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Mark For",
+              "displayName": "Mark For",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "PR Number",
+              "displayName": "PR Number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Reference No.",
+              "displayName": "Reference No.",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Article",
+              "displayName": "Article",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Unit",
+              "displayName": "Unit",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Quantity",
+              "displayName": "Quantity",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1360,
+        240
+      ],
+      "id": "f4c85cdc-0fc4-45fc-8306-1ee860ee0ea8",
+      "name": "Append: PO Rows to Sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "YOUR_GOOGLE_SHEETS_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const sd = $getWorkflowStaticData('global');\nconst flags = Array.isArray(sd.flags) ? sd.flags : [];\n\nlet message;\nif (flags.length === 0) {\n  message = 'All documents were extracted cleanly. No missing fields detected.';\n} else {\n  const parts = flags.map((f) => {\n    const lines = [];\n    if (f.missingHeader.length) {\n      lines.push(`Missing header fields: ${f.missingHeader.join(', ')}`);\n    }\n    if (f.badArticles.length) {\n      lines.push(`Article issues: ${f.badArticles.join('; ')}`);\n    }\n    return `• ${f.document}\\n   ${lines.join('\\n   ')}`;\n  });\n  message =\n    'Some documents may not have extracted fully. Please review the flagged items below and check the original PDFs:\\n\\n' +\n    parts.join('\\n\\n');\n}\n\nreturn [{ json: { summaryText: message } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        816,
+        -176
+      ],
+      "id": "d8f33173-c00e-4a08-80cb-e5f14496faef",
+      "name": "Build: Flag Summary"
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "completionTitle": "Extraction complete",
+        "completionMessage": "={{ $json.summaryText }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        1088,
+        -176
+      ],
+      "id": "ae70f468-a208-442a-941d-8cc607538a24",
+      "name": "Form: Completion"
+    },
+    {
+      "parameters": {
+        "content": "## 📄 Form Intake\nCollects the purchase order PDFs from the user. **Multiple files** can be uploaded in one submission. Only **.pdf** is accepted and at least one file is required.",
+        "height": 336,
+        "width": 256,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -80,
+        -192
+      ],
+      "typeVersion": 1,
+      "id": "2daa828f-cc98-487f-9142-dee48ee9ec4c",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## ✂️ Split & Rename\nSplits a multi-file upload into **one item per PDF** and renames each binary to `data` (the name the Extractor expects). Also **resets the flag buffer** so warnings from a previous run don't carry over.",
+        "height": 336,
+        "width": 256,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        192,
+        -192
+      ],
+      "typeVersion": 1,
+      "id": "c94b8cfa-1aa0-4531-946a-7205c49c1bcb",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "## 🔁 One PO at a time\nBatch size **1**. The Extractor bundles all inputs into a single call, so each PDF must pass through on its own. The **loop** output processes each PO, the **done** output fires once at the end.",
+        "height": 336,
+        "width": 256,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        464,
+        -192
+      ],
+      "typeVersion": 1,
+      "id": "7712e96b-300b-4b66-b4a1-bd380065e48d",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "## 🚩 Build Warnings\nReads the flags collected during the run and builds the message for the end screen. If nothing was flagged, it reports a **clean extraction**. Runs once, on the loop's **done** output.",
+        "height": 352,
+        "width": 256,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        736,
+        -368
+      ],
+      "typeVersion": 1,
+      "id": "885a2b26-6df0-4f99-8146-ccaa78783f17",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "content": "## 🤖 Extract with easybits\nReads the header fields and the full article table from one PDF. Output is wrapped in a `data` envelope. Field setup lives in the Extractor credential – see the main note for the field list and descriptions.",
+        "height": 400,
+        "width": 256,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        736,
+        0
+      ],
+      "typeVersion": 1,
+      "id": "82a02c3c-a97a-4a0a-a6fb-e682748016b2",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "content": "## 🧩 Flatten to Rows\nTurns each PO into **one row per article**, stapling the header fields (PO Number, dates, Mark For, PR Number) onto every line. Adds the **Document Name**. Cleans every empty value (`null`, `NULL`, `\"\"`, blanks) to an empty cell and **records a flag** per document if anything is missing.",
+        "height": 400,
+        "width": 256,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1008,
+        0
+      ],
+      "typeVersion": 1,
+      "id": "95ebbfcb-a5b7-4962-84fb-6f18aeddc600",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "content": "## 📊 Write to Sheet\nAppends every article row to the Google Sheet. **RAW** value mode keeps quantities and special characters literal. Columns map automatically – the header row in the sheet must match the field names exactly.",
+        "height": 400,
+        "width": 256,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1280,
+        0
+      ],
+      "typeVersion": 1,
+      "id": "72938fcd-9ad4-46ed-a50d-a74f49edac84",
+      "name": "Sticky Note6"
+    },
+    {
+      "parameters": {
+        "content": "## ✅ End Screen\nShows the user the result after processing. Lists **which documents and which fields** may not have extracted fully, so they know what to double-check against the original PDF.",
+        "height": 352,
+        "width": 256,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1008,
+        -368
+      ],
+      "typeVersion": 1,
+      "id": "dc412524-2c59-4edc-a858-011769b03f15",
+      "name": "Sticky Note7"
+    },
+    {
+      "parameters": {
+        "content": "## 📦 Purchase Order Extractor (powered by easybits)\n\nUpload one or more purchase order PDFs through a simple form. The workflow reads the **header details** and the **full article table** from each PO and writes everything into a Google Sheet – **one row per article**, with the parent PO fields repeated on each line so every row stands on its own. After processing, the end screen flags any document where a field came back empty, so nothing broken slips through unnoticed.\n\n## 🔧 How the flow works\n**Form** collects the PDFs → **Split** separates them into one item each → **Loop** feeds them in one at a time → **Extract** pulls the data → **Build Rows** flattens and flags → **Sheet** stores the rows. When the loop finishes, a **summary** is shown on the completion screen.\n\n## 📝 Google Sheet setup\nCreate a sheet with these headers in row 1, matching exactly:\n`Document Name | PO Number | PO Date | Delivery Date | Mark For | PR Number | Reference No. | Article | Unit | Quantity`\nConnect it in the **Append** node and set Value Input mode to **RAW**.\n\n## ☁️ Extractor setup (n8n Cloud)\nThe `@easybits/n8n-nodes-extractor` node is **verified** and available natively on n8n Cloud – just search for it when adding a node. Create an easybits account at https://extractor.easybits.tech/, generate an **API key**, and add it as the node credential. The free plan covers **10 fields per call** and **50 requests per month**, which is enough for this workflow.\n\n## 🖥️ Extractor setup (self-hosted)\nInstall the community node from **Settings → Community Nodes → Install**, using the package name `@easybits/n8n-nodes-extractor`. Add your API key as the credential the same way. Full guide: extractor.easybits.tech/documentation/integration\n\n## 📌 Extractor field configuration\nSet an overall **document description** (a UAE hospitality purchase order with a header box and a numbered article table), then define these fields. Each description tells the Extractor where to look and to return `\"null\"` when a value is missing:\n- **mark_for** – the \"Mark For\" value in the middle header column\n- **po_number** – \"PO Number\" in the top-right box (format PO26-XXXXXX)\n- **po_date** – \"PO Date\", DD.MM.YYYY, not the Delivery Date below it\n- **delivery_date** – \"Delivery Date\", DD.MM.YYYY, not the PO Date above it\n- **pr_number** – \"PR Number\" from the header box (lowercase \"i\", header only)\n- **reference_no** – \"Refrence No.\" in the header box, often blank\n- **articles** – an **array** with sub-fields **article**, **unit**, **quantity**, one object per numbered table row. Note in the description that unnumbered lines like \"2 Box\" are notes, not separate articles.\n\n## ⚠️ Good to know\nThe article names only stay clean because the descriptions tell the Extractor that **only numbered rows are real articles**. Reference No. is **not flagged** when empty, since it's blank on most POs and would create constant false warnings.",
+        "height": 1184,
+        "width": 656
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -752,
+        -576
+      ],
+      "typeVersion": 1,
+      "id": "eced66e8-45bc-4b43-935e-d054e30b121d",
+      "name": "Sticky Note8"
+    }
+  ],
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "Prepare: Split PDFs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Build: Flag Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract: PO Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract: PO Data": {
+      "main": [
+        [
+          {
+            "node": "Build: Article Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build: Article Rows": {
+      "main": [
+        [
+          {
+            "node": "Append: PO Rows to Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare: Split PDFs": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append: PO Rows to Sheet": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build: Flag Summary": {
+      "main": [
+        [
+          {
+            "node": "Form: Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  }
+}
