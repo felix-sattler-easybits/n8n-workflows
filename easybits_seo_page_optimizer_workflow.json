@@ -1,0 +1,563 @@
+{
+  "name": "AI SEO Support Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// === Build: Page Audit ===\n// DOM-extracted fields come from the HTML node (immediate predecessor).\n// Raw-HTML signals come from the fetch node (word count, images, links, schema).\n\nconst x    = $input.first().json;                            // extracted fields (HTML node)\nconst url  = $('Set: Target URL').first().json.url;          // requested URL (Node 1)\nconst html = $('Fetch: Live Page HTML').first().json.data;   // raw HTML (Node 2)\n\nconst toArr = v => Array.isArray(v) ? v.filter(s => s && String(s).trim())\n                                    : (v && String(v).trim() ? [String(v)] : []);\n\nlet host = '';\nconst hostM = url.match(/^https?:\\/\\/([^\\/]+)/i);\nif (hostM) host = hostM[1].replace(/^www\\./, '');\n\n// --- title & meta ---\nconst title           = (x.title || '').trim();\nconst metaDescription = (x.metaDescription || '').trim();\nconst metaRobots      = (x.metaRobots || '').trim();\nconst canonical       = (x.canonical || '').trim();\n\n// --- headings ---\nconst h1 = toArr(x.h1);\nconst h2 = toArr(x.h2);\nconst h3 = toArr(x.h3);\n\n// --- word count (drop script/style first, then tags) ---\nconst bodyText = html\n  .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n  .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/&[a-z]+;/gi, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim();\nconst wordCount = bodyText ? bodyText.split(' ').length : 0;\n\n// --- images (paired src + alt from raw HTML) ---\nconst imgTags = html.match(/<img\\b[^>]*>/gi) || [];\nconst isContent = src => {\n  if (!src) return false;\n  const s = src.toLowerCase();\n  if (s.endsWith('.svg')) return false;\n  if (/\\/icons?\\//.test(s)) return false;\n  if (/(arrow|icon|logo|sparkle|favicon)/.test(s)) return false;\n  return /\\.(jpe?g|png|webp|gif)(\\?|$)/.test(s);\n};\nconst images = imgTags.map(tag => {\n  const srcM = tag.match(/\\bsrc\\s*=\\s*[\"']([^\"']*)[\"']/i);\n  const altM = tag.match(/\\balt\\s*=\\s*[\"']([^\"']*)[\"']/i);\n  return { src: srcM ? srcM[1] : '', alt: altM ? altM[1] : null };\n});\nconst contentImages   = images.filter(i => isContent(i.src));\nconst imagesMissingAlt = contentImages\n  .filter(i => !i.alt || !i.alt.trim())\n  .map(i => i.src);\n\n// --- links (internal vs external) ---\nconst linkTags = html.match(/<a\\b[^>]*href\\s*=\\s*[\"'][^\"']*[\"'][^>]*>/gi) || [];\nlet internalLinks = 0, externalLinks = 0;\nfor (const a of linkTags) {\n  const m = a.match(/href\\s*=\\s*[\"']([^\"']*)[\"']/i);\n  if (!m) continue;\n  const href = m[1];\n  if (/^(#|mailto:|tel:|javascript:)/i.test(href)) continue;\n  if (/^https?:\\/\\//i.test(href)) {\n    (host && href.includes(host)) ? internalLinks++ : externalLinks++;\n  } else {\n    internalLinks++; // relative path\n  }\n}\n\n// --- schema (parse JSON-LD from raw HTML, not the mangled node text) ---\nconst ldBlocks = html.match(/<script[^>]*type=[\"']application\\/ld\\+json[\"'][^>]*>[\\s\\S]*?<\\/script>/gi) || [];\nlet schemaTypes = [];\nlet schemaValid = true;\nfor (const block of ldBlocks) {\n  const inner = block.replace(/<script[^>]*>/i, '').replace(/<\\/script>/i, '').trim();\n  try {\n    const parsed = JSON.parse(inner);\n    const nodes = parsed['@graph'] || (Array.isArray(parsed) ? parsed : [parsed]);\n    for (const n of nodes) {\n      if (n && n['@type']) {\n        Array.isArray(n['@type']) ? schemaTypes.push(...n['@type']) : schemaTypes.push(n['@type']);\n      }\n    }\n  } catch (e) {\n    schemaValid = false;\n  }\n}\nschemaTypes = [...new Set(schemaTypes)];\n\n// --- assemble single clean audit object ---\nreturn [{\n  json: {\n    url, host,\n    title, titleLength: title.length,\n    metaDescription, metaDescriptionLength: metaDescription.length,\n    metaRobots, canonical,\n    h1, h1Count: h1.length,\n    h2, h2Count: h2.length,\n    h3, h3Count: h3.length,\n    wordCount,\n    imageCount: images.length,\n    contentImageCount: contentImages.length,\n    imagesMissingAltCount: imagesMissingAlt.length,\n    imagesMissingAlt,\n    internalLinks, externalLinks,\n    schemaPresent: ldBlocks.length > 0,\n    schemaValid, schemaTypes\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        832,
+        0
+      ],
+      "id": "aebe2b6a-bd97-4989-8d4a-5e222598c547",
+      "name": "Build: Page Audit"
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "title",
+              "cssSelector": "title"
+            },
+            {
+              "key": "metaDescription",
+              "cssSelector": "meta[name=\"description\"]",
+              "returnValue": "attribute",
+              "attribute": "content"
+            },
+            {
+              "key": "metaRobots",
+              "cssSelector": "meta[name=\"robots\"]",
+              "returnValue": "attribute",
+              "attribute": "content"
+            },
+            {
+              "key": "canonical",
+              "cssSelector": "link[rel=\"canonical\"]",
+              "returnValue": "attribute",
+              "attribute": "href"
+            },
+            {
+              "key": "h1",
+              "cssSelector": "h1",
+              "returnArray": true
+            },
+            {
+              "key": "h2",
+              "cssSelector": "h2",
+              "returnArray": true
+            },
+            {
+              "key": "h3",
+              "cssSelector": "h3",
+              "returnArray": true
+            },
+            {
+              "key": "imgAlt",
+              "cssSelector": "img",
+              "returnValue": "attribute",
+              "attribute": "alt",
+              "returnArray": true
+            },
+            {
+              "key": "imgSrc",
+              "cssSelector": "img",
+              "skipSelectors": "src",
+              "returnArray": true
+            },
+            {
+              "key": "jsonLd",
+              "cssSelector": "script[type=\"application/ld+json\"]",
+              "returnArray": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        624,
+        0
+      ],
+      "id": "64b1c20a-d38d-4fed-ba3e-16baf1b9da62",
+      "name": "Extract: SEO Elements"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "12f002fd-a388-4eb4-b2f1-3fccff31ed10",
+              "name": "url",
+              "value": "={{ $json.body?.url }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        208,
+        0
+      ],
+      "id": "874bb1ff-ec91-4652-9dc5-ec6cba50bb30",
+      "name": "Set: Target URL"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        416,
+        0
+      ],
+      "id": "aa2e1b9a-0f7d-4909-9e79-d224e076c7e7",
+      "name": "Fetch: Live Page HTML"
+    },
+    {
+      "parameters": {
+        "jsCode": "// === Score: SEO Flags ===\n// Deterministic SEO scoring. No LLM. Reads the page audit AND the GSC signals,\n// applies fixed rules, emits a flat array of flags ordered by severity.\n// Gemini later writes recommendation text against these flags — it does not score.\n\nconst a   = $('Build: Page Audit').first().json;\nconst gsc = $('Build: GSC Signals').first().json.gsc;\n\nconst SEV = { high: 3, medium: 2, low: 1 };\nconst flags = [];\nconst add = (category, severity, issue, detail) =>\n  flags.push({ category, severity, issue, detail: detail ?? '' });\n\n// --- Meta & Titles ---\nif (!a.title) {\n  add('Meta & Titles', 'high', 'Missing page title', 'No <title> tag found.');\n} else {\n  if (a.titleLength < 30)\n    add('Meta & Titles', 'medium', 'Title too short',\n        `${a.titleLength} chars. Aim for 30–60 to use the SERP space.`);\n  if (a.titleLength > 60)\n    add('Meta & Titles', 'medium', 'Title too long',\n        `${a.titleLength} chars. Over ~60 risks truncation in search results.`);\n}\n\nif (!a.metaDescription) {\n  add('Meta & Titles', 'high', 'Missing meta description',\n      'No meta description. Google may auto-generate a worse snippet.');\n} else {\n  if (a.metaDescriptionLength < 70)\n    add('Meta & Titles', 'medium', 'Meta description too short',\n        `${a.metaDescriptionLength} chars. Aim for 70–155.`);\n  if (a.metaDescriptionLength > 160)\n    add('Meta & Titles', 'medium', 'Meta description too long',\n        `${a.metaDescriptionLength} chars. Over ~160 gets truncated.`);\n  const emojiCount = (a.metaDescription.match(/[\\u{1F000}-\\u{1FAFF}\\u{2600}-\\u{27BF}\\u{2B00}-\\u{2BFF}]/gu) || []).length;\n  if (emojiCount >= 3)\n    add('Meta & Titles', 'low', 'Meta description is emoji-heavy',\n        `${emojiCount} emoji. A few can help CTR; many read as spammy and dilute the message.`);\n}\n\n// --- Content & Headings ---\nif (a.h1Count === 0)\n  add('Content & Headings', 'high', 'Missing H1',\n      'No H1 on the page. Every page should have one clear H1.');\nif (a.h1Count > 1)\n  add('Content & Headings', 'medium', 'Multiple H1 tags',\n      `${a.h1Count} H1s found. Use one H1, then H2/H3 for structure.`);\nif (a.h2Count === 0)\n  add('Content & Headings', 'low', 'No H2 headings',\n      'No H2s. Subheadings help structure and keyword coverage.');\nif (a.wordCount < 300)\n  add('Content & Headings', 'medium', 'Thin content',\n      `${a.wordCount} words. Pages under ~300 words often struggle to rank.`);\n\n// --- Images ---\nif (a.imagesMissingAltCount > 0)\n  add('Images', a.imagesMissingAltCount >= 3 ? 'medium' : 'low',\n      'Images missing alt text',\n      `${a.imagesMissingAltCount} of ${a.contentImageCount} content images have no alt text.`);\n\n// --- Schema ---\nif (!a.schemaPresent)\n  add('Schema', 'low', 'No structured data',\n      'No JSON-LD schema found. Schema can enable rich results.');\nif (a.schemaPresent && !a.schemaValid)\n  add('Schema', 'medium', 'Invalid structured data',\n      'JSON-LD present but failed to parse. Broken schema is ignored by Google.');\n\n// --- Internal Linking ---\nif (a.internalLinks === 0)\n  add('Internal Linking', 'medium', 'No internal links',\n      'No internal links found. Internal links spread ranking signals.');\nelse if (a.internalLinks < 3)\n  add('Internal Linking', 'low', 'Few internal links',\n      `${a.internalLinks} internal links. Consider linking to related pages.`);\n\n// --- Keyword Targeting (GSC-grounded; only when data exists) ---\nif (gsc && gsc.hasData) {\n\n  // striking distance: queries ranking 5–15 are the closest wins\n  for (const q of gsc.strikingDistance.slice(0, 5)) {\n    const inTitle = a.title.toLowerCase().includes(q.query.toLowerCase());\n    add('Keyword Targeting',\n        inTitle ? 'low' : 'high',\n        `Striking-distance query: \"${q.query}\"`,\n        `Position ${q.position.toFixed(1)}, ${q.impressions} impressions. ` +\n        (inTitle\n          ? 'Already in the title — refine the meta and content to push it up.'\n          : 'Not in the title. Work this query into the title, H1, and meta to climb.'));\n  }\n\n  // high impressions, ~zero clicks: title/meta not earning the click\n  for (const q of gsc.noClickHighImpression.slice(0, 3)) {\n    add('Keyword Targeting', 'high',\n        `High impressions, low CTR: \"${q.query}\"`,\n        `${q.impressions} impressions at ${(q.ctr * 100).toFixed(1)}% CTR. ` +\n        'The page shows up but the title/meta are not compelling enough to win the click.');\n  }\n}\n\n// --- order by severity (high → low), stable within a tier ---\nflags.sort((x, y) => SEV[y.severity] - SEV[x.severity]);\n\n// --- summary counts for the frontend header ---\nconst summary = {\n  url: a.url,\n  totalFlags: flags.length,\n  high:   flags.filter(f => f.severity === 'high').length,\n  medium: flags.filter(f => f.severity === 'medium').length,\n  low:    flags.filter(f => f.severity === 'low').length,\n  categories: [...new Set(flags.map(f => f.category))],\n  gscHasData: !!(gsc && gsc.hasData)\n};\n\nreturn [{ json: { summary, flags, audit: a, gsc } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1328,
+        0
+      ],
+      "id": "5129f9e5-172b-4c45-87c5-daf2bb6f4e82",
+      "name": "Score: SEO Flags"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are an SEO copywriter producing paste-ready on-page SEO content. You write final copy a human can paste directly into the CMS. You do not grade, reorder, or invent issues — you only write fixes for the flags given to you.\n\nBRAND VOICE\nBrand: YOUR_BRAND\nVoice: describe your brand voice here, e.g. clear, confident, speaks to your target customer.\nNever sacrifice clarity for keywords. Set your spelling convention here, e.g. British English.\nCore terms (preserve exactly): YOUR_BRAND, plus any product names that must never be altered.\n\nPAGE AUDIT (current state of the page)\n{{ JSON.stringify($json.audit) }}\n\nFLAGS TO ADDRESS (each needs a recommendation; most need a proposed rewrite)\n{{ JSON.stringify($json.flags) }}\n\nHARD CONSTRAINTS (these are non-negotiable; the output is checked against them)\n- Title: 30–60 characters. Must include the core topic. Keep \"| YOUR_BRAND\" branding if a title rewrite is needed.\n- Meta description: 70–155 characters. At most ONE emoji. Must read as a natural sentence, not a keyword list.\n- Image alt text: under 125 characters, describe what the image actually shows, no \"image of\" prefix, no keyword stuffing.\n- Preserve all brand names exactly as written. Never translate or alter: YOUR_BRAND, plus any product names listed above.\n- White-hat only: no keyword stuffing, no misleading claims, no hidden text tactics.\n- Write in British/international English.\n\nOUTPUT FORMAT\nReturn ONLY a JSON array. No markdown, no code fences, no commentary before or after.\nOne object per flag, in the same order given, each with exactly these keys:\n- \"issue\": echo the flag's issue text verbatim (used for matching)\n- \"category\": echo the flag's category\n- \"severity\": echo the flag's severity\n- \"recommendation\": one or two plain sentences explaining the fix\n- \"proposedRewrite\": the paste-ready replacement text, OR null if the flag has no single text fix (e.g. internal-linking advice)\n\nFor \"Images missing alt text\", set \"proposedRewrite\" to a JSON object mapping each missing image filename (from audit.imagesMissingAlt) to its suggested alt text, like {\"/path/img.jpg\": \"suggested alt\"}.\n\nReturn the JSON array now.",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        1552,
+        0
+      ],
+      "id": "349b023d-849a-4400-a52b-bc650cd6716f",
+      "name": "Generate: SEO Rewrites (Gemini)"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1632,
+        160
+      ],
+      "id": "0d49bfa6-9700-44c1-8476-c37570aa809e",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {}
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// === Verify: Rewrites ===\n// Deterministic check of Gemini's rewrites against the hard constraints.\n// The LLM proposed; this node enforces. Each rewrite gets pass / needs_review\n// with explicit reasons. Nothing here trusts the model's self-assessment.\n\n// --- CONFIG: the brand name that must survive every rewrite ---\nconst BRAND = 'YOUR_BRAND';\n\nconst raw   = $input.first().json.text || '';\nconst audit = $('Score: SEO Flags').first().json.audit;\n\n// --- strip code fences if Gemini wrapped the JSON despite instructions ---\nconst cleaned = raw.replace(/```json/gi, '').replace(/```/g, '').trim();\n\nlet rewrites;\ntry {\n  rewrites = JSON.parse(cleaned);\n} catch (e) {\n  return [{ json: {\n    parseError: true,\n    message: 'Could not parse Gemini output as JSON.',\n    rawPreview: cleaned.slice(0, 500)\n  }}];\n}\nif (!Array.isArray(rewrites)) rewrites = [rewrites];\n\nconst countEmoji = s =>\n  (String(s).match(/[\\u{1F000}-\\u{1FAFF}\\u{2600}-\\u{27BF}\\u{2B00}-\\u{2BFF}]/gu) || []).length;\nconst hasBrand = (s, term) => new RegExp(term, 'i').test(String(s));\n\n// --- verify one rewrite against the rule for its issue type ---\nfunction verify(r) {\n  const checks = [];\n  const fail = m => checks.push(m);\n  const issue = (r.issue || '').toLowerCase();\n  const pr = r.proposedRewrite;\n\n  // brand-name preservation applies to any text rewrite\n  const textForBrand = typeof pr === 'string' ? pr\n    : pr && typeof pr === 'object' ? Object.values(pr).join(' ') : '';\n  if (textForBrand && new RegExp(BRAND, 'i').test(audit.title + audit.metaDescription) && !hasBrand(textForBrand, BRAND))\n    fail('Brand name \"' + BRAND + '\" dropped from rewrite.');\n\n  // --- meta description ---\n  if (issue.includes('meta description')) {\n    if (typeof pr !== 'string') { fail('Expected a string rewrite.'); }\n    else {\n      const len = pr.length;\n      if (len < 70)  fail(`Too short: ${len} chars (min 70).`);\n      if (len > 155) fail(`Too long: ${len} chars (max 155).`);\n      const em = countEmoji(pr);\n      if (em > 1) fail(`Too many emoji: ${em} (max 1).`);\n    }\n  }\n\n  // --- title ---\n  else if (issue.includes('title')) {\n    if (typeof pr !== 'string') { fail('Expected a string rewrite.'); }\n    else {\n      const len = pr.length;\n      if (len < 30) fail(`Too short: ${len} chars (min 30).`);\n      if (len > 60) fail(`Too long: ${len} chars (max 60).`);\n    }\n  }\n\n  // --- image alt text (object: filename -> alt) ---\n  else if (issue.includes('alt text')) {\n    if (!pr || typeof pr !== 'object') { fail('Expected an object mapping filenames to alt text.'); }\n    else {\n      const expected = audit.imagesMissingAlt || [];\n      for (const file of expected)\n        if (!(file in pr)) fail(`Missing alt suggestion for ${file}.`);\n      for (const [file, alt] of Object.entries(pr)) {\n        if (!alt || !String(alt).trim()) fail(`Empty alt for ${file}.`);\n        else if (String(alt).length > 125) fail(`Alt too long for ${file}: ${String(alt).length} chars (max 125).`);\n        else if (/^image of|^picture of|^photo of/i.test(String(alt).trim()))\n          fail(`Alt for ${file} starts with a redundant prefix.`);\n      }\n    }\n  }\n\n  // flags with no single text fix (e.g. internal linking) — advice only\n  // no proposedRewrite expected; nothing to verify\n\n  return checks;\n}\n\nconst verified = rewrites.map(r => {\n  const issues = verify(r);\n  return {\n    ...r,\n    status: issues.length === 0 ? 'pass' : 'needs_review',\n    verifyIssues: issues\n  };\n});\n\n// --- re-sort by severity so the final order is authoritative, not Gemini's ---\nconst SEV = { high: 3, medium: 2, low: 1 };\nverified.sort((a, b) => (SEV[b.severity] || 0) - (SEV[a.severity] || 0));\n\n// --- group into sections for the frontend ---\nconst sections = {};\nfor (const v of verified) {\n  (sections[v.category] = sections[v.category] || []).push(v);\n}\n\nconst summary = {\n  url: audit.url,\n  total: verified.length,\n  passed: verified.filter(v => v.status === 'pass').length,\n  needsReview: verified.filter(v => v.status === 'needs_review').length\n};\n\nreturn [{ json: { summary, sections, recommendations: verified, audit } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1904,
+        0
+      ],
+      "id": "63db2b56-ba20-440c-99cd-95b14615ea55",
+      "name": "Verify: Rewrites"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/webmasters/v3/sites/sc-domain%3AYOUR_DOMAIN.com/searchAnalytics/query",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  startDate: \"2026-03-25\",\n  endDate: \"2026-06-20\",\n  dimensions: [\"query\"],\n  dimensionFilterGroups: [{\n    filters: [{ dimension: \"page\", operator: \"equals\", expression: $('Set: Target URL').first().json.url }]\n  }],\n  rowLimit: 25\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        688,
+        -448
+      ],
+      "id": "16225268-7ced-4310-9d9f-4fe458d9d839",
+      "name": "Fetch: GSC Page Performance",
+      "credentials": {
+        "googleOAuth2Api": {}
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// === Build: GSC Signals ===\n// Turns GSC query rows into deterministic SEO signals for this page.\n// Handles the no-rows case (new property, low-traffic page) as a normal\n// path, not an error: returns hasData=false and empty arrays so the\n// merge and scorer work whether or not GSC has data yet.\n\nconst inp = $input.first().json;\nconst url = $('Set: Target URL').first().json.url;\n\n// GSC returns { rows: [...] } on success, or no rows key when empty (still 200).\nconst rows = Array.isArray(inp.rows) ? inp.rows : [];\n\n// --- no data yet: return a valid, empty signal object ---\nif (rows.length === 0) {\n  return [{ json: {\n    gsc: {\n      hasData: false,\n      url,\n      totalClicks: 0,\n      totalImpressions: 0,\n      avgPosition: null,\n      topQueries: [],\n      strikingDistance: [],\n      noClickHighImpression: []\n    }\n  }}];\n}\n\n// --- normalise rows (GSC key is an array because we queried by \"query\") ---\nconst queries = rows.map(r => ({\n  query: Array.isArray(r.keys) ? r.keys[0] : String(r.keys || ''),\n  clicks: r.clicks || 0,\n  impressions: r.impressions || 0,\n  ctr: r.ctr || 0,\n  position: r.position || 0\n}));\n\nconst totalClicks      = queries.reduce((s, q) => s + q.clicks, 0);\nconst totalImpressions = queries.reduce((s, q) => s + q.impressions, 0);\n// impression-weighted average position (more meaningful than a flat mean)\nconst avgPosition = totalImpressions > 0\n  ? queries.reduce((s, q) => s + q.position * q.impressions, 0) / totalImpressions\n  : null;\n\n// top queries by impressions, for context in the Gemini prompt\nconst topQueries = [...queries]\n  .sort((a, b) => b.impressions - a.impressions)\n  .slice(0, 10);\n\n// striking distance: ranking 5–15 with real impressions = closest wins.\n// these are the queries to aim the rewrites at.\nconst strikingDistance = queries\n  .filter(q => q.position >= 5 && q.position <= 15 && q.impressions >= 10)\n  .sort((a, b) => a.position - b.position);\n\n// high impressions but almost no clicks = title/meta not compelling.\nconst noClickHighImpression = queries\n  .filter(q => q.impressions >= 50 && q.ctr < 0.01)\n  .sort((a, b) => b.impressions - a.impressions);\n\nreturn [{ json: {\n  gsc: {\n    hasData: true,\n    url,\n    totalClicks,\n    totalImpressions,\n    avgPosition,\n    topQueries,\n    strikingDistance,\n    noClickHighImpression\n  }\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        -448
+      ],
+      "id": "7e6925ed-3274-4fac-af9f-ac6bc0dc9779",
+      "name": "Build: GSC Signals"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1104,
+        -240
+      ],
+      "id": "86fcde22-f7c0-43ca-80c8-cfb6afff849b",
+      "name": "Merge: Audit + GSC"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b8b59b6f-1a1a-4856-846f-dcd9e86c7211",
+              "leftValue": "={{ $json.summary.needsReview }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2112,
+        0
+      ],
+      "id": "ac1ceec2-65d2-4f14-8887-d168c6fa0e81",
+      "name": "IF: Any Needs Review?"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are an SEO copywriter fixing on-page SEO content that failed automated validation. Each item below was rejected for a SPECIFIC measured reason. Fix exactly that problem while keeping the copy strong. Do not touch items that are not listed.\n\nBRAND VOICE\nBrand: YOUR_BRAND\nVoice: describe your brand voice here, e.g. clear, confident, speaks to your target customer.\nNever sacrifice clarity for keywords. Set your spelling convention here, e.g. British English.\nCore terms (preserve exactly): YOUR_BRAND, plus any product names that must never be altered.\n\nPAGE AUDIT (current state of the page, for context)\n{{ JSON.stringify($json.audit) }}\n\nITEMS THAT FAILED VALIDATION (fix each one; the reason is in \"verifyIssues\")\n{{ JSON.stringify($json.recommendations.filter(r => r.status === 'needs_review')) }}\n\nHARD CONSTRAINTS (the fix is re-checked against these — comply exactly)\n- Title: 30–60 characters.\n- Meta description: 70–155 characters. At most ONE emoji. Natural sentence, not a keyword list.\n- Image alt text: under 125 characters, describe the actual image, no \"image of\" prefix, no stuffing.\n- Preserve brand names exactly: YOUR_BRAND, plus any product names listed above.\n- White-hat only. British/international English.\n- IMPORTANT: if the failure was \"too long\", count characters carefully and aim for the MIDDLE of the range, not the edge. Leave yourself margin.\n\nOUTPUT FORMAT\nReturn ONLY a JSON array. No markdown, no code fences, no commentary.\nOne object per failed item, in the same order, each with exactly these keys:\n- \"issue\": echo the item's issue text verbatim\n- \"category\": echo the category\n- \"severity\": echo the severity\n- \"recommendation\": one or two plain sentences\n- \"proposedRewrite\": the corrected paste-ready text, OR the filename to alt-text object for alt-text items\n\nReturn the JSON array now.",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        2320,
+        -96
+      ],
+      "id": "2173b673-07ba-48cd-a808-47d3b283d4ae",
+      "name": "Generate: Fix Rewrites"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        -272
+      ],
+      "id": "b55540b1-590e-4cdf-a472-fdf4ad91030f",
+      "name": "Google Gemini Chat Model1",
+      "credentials": {
+        "googlePalmApi": {}
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// === Verify: Fixes ===\n// Re-verifies the retried rewrites against the same hard constraints, then\n// merges the corrected items back with the items that already passed.\n// Outputs the same shape as Verify: Rewrites so both IF branches match.\n\n// --- CONFIG: the brand name that must survive every rewrite ---\nconst BRAND = 'YOUR_BRAND';\n\nconst prev  = $('Verify: Rewrites').first().json;   // guaranteed to have run on this branch\nconst audit = prev.audit;\nconst gsc   = prev.gsc;\nconst original = prev.recommendations || [];\n\n// --- parse the fix output defensively ---\nconst raw = $input.first().json.text || '';\nconst cleaned = raw.replace(/```json/gi, '').replace(/```/g, '').trim();\n\nlet fixes = [];\nlet fixParseFailed = false;\ntry {\n  fixes = JSON.parse(cleaned);\n  if (!Array.isArray(fixes)) fixes = [fixes];\n} catch (e) {\n  fixParseFailed = true;\n}\n\n// --- verifier (same rules as Verify: Rewrites) ---\nconst countEmoji = s =>\n  (String(s).match(/[\\u{1F000}-\\u{1FAFF}\\u{2600}-\\u{27BF}\\u{2B00}-\\u{2BFF}]/gu) || []).length;\n\nfunction verify(r) {\n  const checks = [];\n  const fail = m => checks.push(m);\n  const issue = (r.issue || '').toLowerCase();\n  const pr = r.proposedRewrite;\n\n  const textForBrand = typeof pr === 'string' ? pr\n    : pr && typeof pr === 'object' ? Object.values(pr).join(' ') : '';\n  if (textForBrand && new RegExp(BRAND, 'i').test(audit.title + audit.metaDescription) && !new RegExp(BRAND, 'i').test(textForBrand))\n    fail('Brand name \"' + BRAND + '\" dropped from rewrite.');\n\n  if (issue.includes('meta description')) {\n    if (typeof pr !== 'string') fail('Expected a string rewrite.');\n    else {\n      if (pr.length < 70)  fail(`Too short: ${pr.length} chars (min 70).`);\n      if (pr.length > 155) fail(`Too long: ${pr.length} chars (max 155).`);\n      if (countEmoji(pr) > 1) fail(`Too many emoji: ${countEmoji(pr)} (max 1).`);\n    }\n  } else if (issue.includes('title')) {\n    if (typeof pr !== 'string') fail('Expected a string rewrite.');\n    else {\n      if (pr.length < 30) fail(`Too short: ${pr.length} chars (min 30).`);\n      if (pr.length > 60) fail(`Too long: ${pr.length} chars (max 60).`);\n    }\n  } else if (issue.includes('alt text')) {\n    if (!pr || typeof pr !== 'object') fail('Expected an object mapping filenames to alt text.');\n    else {\n      for (const file of (audit.imagesMissingAlt || []))\n        if (!(file in pr)) fail(`Missing alt suggestion for ${file}.`);\n      for (const [file, alt] of Object.entries(pr)) {\n        if (!alt || !String(alt).trim()) fail(`Empty alt for ${file}.`);\n        else if (String(alt).length > 125) fail(`Alt too long for ${file}: ${String(alt).length} chars (max 125).`);\n        else if (/^image of|^picture of|^photo of/i.test(String(alt).trim()))\n          fail(`Alt for ${file} starts with a redundant prefix.`);\n      }\n    }\n  }\n  return checks;\n}\n\n// --- re-verify each fixed item, keyed by issue ---\nconst fixedByIssue = {};\nif (!fixParseFailed) {\n  for (const f of fixes) {\n    const issues = verify(f);\n    fixedByIssue[f.issue] = {\n      ...f,\n      status: issues.length === 0 ? 'pass' : 'needs_review',\n      verifyIssues: issues,\n      retried: true\n    };\n  }\n}\n\n// --- merge: swap each originally-failed item for its fixed version ---\nconst merged = original.map(r => {\n  if (r.status === 'needs_review' && fixedByIssue[r.issue]) return fixedByIssue[r.issue];\n  return r;\n});\n\n// --- re-sort by severity ---\nconst SEV = { high: 3, medium: 2, low: 1 };\nmerged.sort((a, b) => (SEV[b.severity] || 0) - (SEV[a.severity] || 0));\n\n// --- re-section ---\nconst sections = {};\nfor (const v of merged) {\n  (sections[v.category] = sections[v.category] || []).push(v);\n}\n\nconst summary = {\n  url: audit.url,\n  total: merged.length,\n  passed: merged.filter(v => v.status === 'pass').length,\n  needsReview: merged.filter(v => v.status === 'needs_review').length,\n  retryApplied: true\n};\n\nreturn [{ json: { summary, sections, recommendations: merged, audit, gsc } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2672,
+        -96
+      ],
+      "id": "c8e58eaf-cfc6-4535-90f7-049c76e901e6",
+      "name": "Verify: Fixes"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "seo-optimizer",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "f270d734-d51e-472c-9e66-56813d5e8a89",
+      "name": "Webhook"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2880,
+        -96
+      ],
+      "id": "217df1bb-c7fb-49f0-afca-0deaff96dd99",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "connections": {
+    "Extract: SEO Elements": {
+      "main": [
+        [
+          {
+            "node": "Build: Page Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set: Target URL": {
+      "main": [
+        [
+          {
+            "node": "Fetch: Live Page HTML",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch: GSC Page Performance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch: Live Page HTML": {
+      "main": [
+        [
+          {
+            "node": "Extract: SEO Elements",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build: Page Audit": {
+      "main": [
+        [
+          {
+            "node": "Merge: Audit + GSC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score: SEO Flags": {
+      "main": [
+        [
+          {
+            "node": "Generate: SEO Rewrites (Gemini)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate: SEO Rewrites (Gemini)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate: SEO Rewrites (Gemini)": {
+      "main": [
+        [
+          {
+            "node": "Verify: Rewrites",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch: GSC Page Performance": {
+      "main": [
+        [
+          {
+            "node": "Build: GSC Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build: GSC Signals": {
+      "main": [
+        [
+          {
+            "node": "Merge: Audit + GSC",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge: Audit + GSC": {
+      "main": [
+        [
+          {
+            "node": "Score: SEO Flags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify: Rewrites": {
+      "main": [
+        [
+          {
+            "node": "IF: Any Needs Review?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Any Needs Review?": {
+      "main": [
+        [
+          {
+            "node": "Generate: Fix Rewrites",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate: Fix Rewrites",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate: Fix Rewrites": {
+      "main": [
+        [
+          {
+            "node": "Verify: Fixes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Set: Target URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify: Fixes": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  }
+}
