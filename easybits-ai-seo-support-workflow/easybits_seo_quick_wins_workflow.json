@@ -1,0 +1,121 @@
+{
+  "name": "AI SEO Support Quickwins Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "seo-quickwins",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -176,
+        0
+      ],
+      "id": "1a1c9c1b-765c-432b-9d01-aff44a49b6ba",
+      "name": "Webhook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/webmasters/v3/sites/sc-domain%3AYOUR_DOMAIN.com/searchAnalytics/query",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  startDate: new Date(Date.now() - 90*24*60*60*1000).toISOString().slice(0,10),\n  endDate:   new Date(Date.now() - 3*24*60*60*1000).toISOString().slice(0,10),\n  dimensions: [\"page\"],\n  rowLimit: 1000\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        48,
+        0
+      ],
+      "id": "caa5767f-3c39-4195-8095-a4938c2e7deb",
+      "name": "Fetch: GSC All Pages",
+      "credentials": {
+        "googleOAuth2Api": {}
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// === Score: Quick Wins ===\n// Site-wide quick-win finder. Pure deterministic scoring on GSC per-page data.\n// No fetch, no LLM. Each page is scored on two signals that are fixable fast:\n//   1. Striking distance — ranking 5–15, close to page one\n//   2. High impressions, low CTR — shown a lot, barely clicked (weak title/meta)\n// Output is a ranked queue; each row links into the page optimizer.\n\nconst inp = $input.first().json;\nconst rows = Array.isArray(inp.rows) ? inp.rows : [];\n\n// --- no data yet (new property / weekend): return a valid empty result ---\nif (rows.length === 0) {\n  return [{ json: {\n    summary: { hasData: false, totalPages: 0, quickWins: 0, generatedAt: new Date().toISOString() },\n    quickWins: []\n  }}];\n}\n\n// --- normalise GSC rows (keys[0] is the page URL when dimension = page) ---\nconst pages = rows.map(r => ({\n  url: Array.isArray(r.keys) ? r.keys[0] : String(r.keys || ''),\n  clicks: r.clicks || 0,\n  impressions: r.impressions || 0,\n  ctr: r.ctr || 0,\n  position: r.position || 0\n}));\n\nconst wins = [];\n\nfor (const p of pages) {\n  // --- Signal 1: striking distance (position 5–15, real impressions) ---\n  if (p.position >= 5 && p.position <= 15 && p.impressions >= 20) {\n    // closer to page one + more impressions = higher value\n    const score = (16 - p.position) * 10 + Math.min(p.impressions / 10, 100);\n    wins.push({\n      url: p.url,\n      type: 'Striking distance',\n      severity: p.position <= 10 ? 'high' : 'medium',\n      score: Math.round(score),\n      position: Math.round(p.position * 10) / 10,\n      impressions: p.impressions,\n      clicks: p.clicks,\n      ctr: Math.round(p.ctr * 1000) / 10, // percent, 1 decimal\n      why: `Ranking ${p.position.toFixed(1)} with ${p.impressions} impressions. A focused title, meta and content pass can push this onto page one.`\n    });\n  }\n\n  // --- Signal 2: high impressions, low CTR (weak title/meta) ---\n  // only flag if NOT already a striking-distance win, to avoid double-listing\n  else if (p.impressions >= 100 && p.ctr < 0.02) {\n    const score = Math.min(p.impressions / 5, 200) + (0.02 - p.ctr) * 1000;\n    wins.push({\n      url: p.url,\n      type: 'Low CTR',\n      severity: p.impressions >= 500 ? 'high' : 'medium',\n      score: Math.round(score),\n      position: Math.round(p.position * 10) / 10,\n      impressions: p.impressions,\n      clicks: p.clicks,\n      ctr: Math.round(p.ctr * 1000) / 10,\n      why: `${p.impressions} impressions but only ${(p.ctr * 100).toFixed(1)}% CTR. The page shows up — a stronger title and meta would win more of those clicks.`\n    });\n  }\n}\n\n// --- rank by score, highest value first ---\nwins.sort((a, b) => b.score - a.score);\n\nconst summary = {\n  hasData: true,\n  totalPages: pages.length,\n  quickWins: wins.length,\n  strikingDistance: wins.filter(w => w.type === 'Striking distance').length,\n  lowCtr: wins.filter(w => w.type === 'Low CTR').length,\n  generatedAt: new Date().toISOString()\n};\n\nreturn [{ json: { summary, quickWins: wins } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        0
+      ],
+      "id": "1f2865e5-f7a6-4577-9b4a-19d6e477563b",
+      "name": "Score: Quick Wins"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        496,
+        0
+      ],
+      "id": "9dd9503a-e143-49c2-ab93-d7e303601309",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Fetch: GSC All Pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch: GSC All Pages": {
+      "main": [
+        [
+          {
+            "node": "Score: Quick Wins",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score: Quick Wins": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  }
+}
