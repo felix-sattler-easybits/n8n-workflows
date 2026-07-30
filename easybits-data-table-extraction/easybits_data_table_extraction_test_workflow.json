@@ -1,0 +1,310 @@
+{
+  "name": "Data Table Extraction Test",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Data Table Test",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Document Upload",
+              "fieldType": "file",
+              "acceptFileTypes": ".pdf,.png,.jpg,.jpeg",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Extraction Engine",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "General Extraction Engine"
+                  },
+                  {
+                    "option": "Specialized Extraction Engine"
+                  }
+                ]
+              },
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {
+          "buttonLabel": "Upload"
+        }
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.5,
+      "position": [
+        0,
+        0
+      ],
+      "id": "23bc4be5-bcd5-43e4-926c-e5d2b28057c3",
+      "name": "On form submission"
+    },
+    {
+      "parameters": {
+        "jsCode": "$input.item.json.startMs = Date.now();\n$input.item.json.engineLabel = $input.item.json['Extraction Engine'];\nreturn $input.item;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "id": "ebab3242-44be-4b7b-9fe3-5ce0c14405e2",
+      "name": "Code: Start Timer"
+    },
+    {
+      "parameters": {},
+      "type": "@easybits/n8n-nodes-extractor.easybitsExtractor",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "id": "70abed2a-8b71-4bf1-ae2a-d314b19ccee0",
+      "name": "easybits Extractor",
+      "credentials": {
+        "easybitsExtractorApi": {
+          "id": "YOUR_EASYBITS_CREDENTIAL_ID",
+          "name": "YOUR_EASYBITS_PIPELINE"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ground truth from the reference table. Set a field to null to skip checking it.\nconst EXPECTED = [\n  { si:'1',  new_tin:'622589468028', asses_name:'Dr. Elijah Taylor',      father_name:'Mr. Lucas Miller',     contact_email_address:'NULL', current_address:'Building #3, Flat #D-2, Maplewood Residential Area, North District' },\n  { si:'2',  new_tin:'328329768971', asses_name:'William Hernandez',       father_name:'Md. Amelia Jones',     contact_email_address:'williamhernandez74@gmail.com', current_address:'House No. 875, Road No. 16, Sector-3, Riverdale, NULL City' },\n  { si:'3',  new_tin:'629864854322', asses_name:'Dr. Ava Perez',           father_name:'Late Noah Martin',     contact_email_address:'NULL', current_address:'Building #48, Flat #D-1, Pinecrest Residential Area, East Sector' },\n  { si:'4',  new_tin:'518980201544', asses_name:'Dr. Charlotte Hernandez', father_name:'Late Mia Hernandez',   contact_email_address:'drcharlottehernandez29@example.com', current_address:'House No. 743, Road No. 15, Sector-10, Springfield, NULL City' },\n  { si:'5',  new_tin:'271528834154', asses_name:'Dr. Benjamin Martin',     father_name:'Md. Liam Martin',      contact_email_address:'NULL', current_address:'Building #27, Flat #B-10, Oakhaven Residential Area, East Sector' },\n  { si:'6',  new_tin:'183400333825', asses_name:'Evelyn Martin',           father_name:'Md. Emma Miller',      contact_email_address:'NULL', current_address:'Building #41, Flat #D-1, Riverdale Residential Area, East Sector' },\n  { si:'7',  new_tin:'228615667334', asses_name:'Mr. Sophia Smith',        father_name:'Md. Harper Rodriguez', contact_email_address:'mrsophiasmith62@yahoo.com', current_address:'House No. 168, Road No. 19, Sector-12, Springfield, NULL City' },\n  { si:'8',  new_tin:'547058997022', asses_name:'Md. William Williams',    father_name:'Late Benjamin Thomas', contact_email_address:'NULL', current_address:'Building #38, Flat #D-7, Pinecrest Residential Area, South District' },\n  { si:'9',  new_tin:'598117134437', asses_name:'Emma Brown',              father_name:'Late Noah Taylor',     contact_email_address:'NULL', current_address:'Building #46, Flat #D-6, Lakeside Residential Area, North District' },\n  { si:'10', new_tin:'705458769584', asses_name:'Mr. Lucas Moore',         father_name:'Md. Michael Wilson',   contact_email_address:'NULL', current_address:'House No. 131, Road No. 1, Sector-2, Maplewood, NULL City' },\n  { si:'11', new_tin:'682751617954', asses_name:'Charlotte Garcia',        father_name:'Md. Ava Moore',        contact_email_address:'charlottegarcia77@example.com', current_address:'House No. 901, Road No. 8, Sector-11, Maplewood, NULL City' },\n  { si:'12', new_tin:'659804998989', asses_name:'Mrs. Lucas Thomas',       father_name:'Late Emma Thomas',     contact_email_address:'mrslucasthomas86@example.com', current_address:'Building #17, Flat #A-10, Springfield Residential Area, North District' },\n  { si:'13', new_tin:'857553385890', asses_name:'Elijah Hernandez',        father_name:'Late Ava Brown',       contact_email_address:'elijahhernandez11@yahoo.com', current_address:'Building #50, Flat #B-2, Elmwood Residential Area, West End' },\n  { si:'14', new_tin:'268664338496', asses_name:'Md. Luna Jackson',        father_name:'Emma Taylor',          contact_email_address:'mdlunajackson74@hotmail.com', current_address:'Building #49, Flat #D-6, Elmwood Residential Area, South District' },\n  { si:'15', new_tin:'063585939271', asses_name:'Mrs. Luna Martinez',      father_name:'Oliver Garcia',        contact_email_address:'mrslunamartinez81@hotmail.com', current_address:'House No. 595, Road No. 13, Sector-13, Cedar Grove, NULL City' },\n  { si:'16', new_tin:'858997898231', asses_name:'Dr. Alexander Perez',     father_name:'Late Amelia Thomas',   contact_email_address:'NULL', current_address:'House No. 97, Road No. 9, Sector-12, Springfield, NULL City' },\n  { si:'17', new_tin:'422517100957', asses_name:'Mr. Henry Taylor',        father_name:'Md. William Williams', contact_email_address:'NULL', current_address:'House No. 52, Road No. 20, Sector-3, Pinecrest, NULL City' },\n  { si:'18', new_tin:'048304172125', asses_name:'Mrs. Liam Miller',        father_name:'Mr. Noah Gonzalez',    contact_email_address:'mrsliammiller72@yahoo.com', current_address:'Building #11, Flat #D-10, Riverdale Residential Area, South District' },\n  { si:'19', new_tin:'451487970369', asses_name:'Mrs. Luna Johnson',       father_name:'Mr. James Hernandez',  contact_email_address:'NULL', current_address:'Building #15, Flat #A-7, Springfield Residential Area, West End' },\n  { si:'20', new_tin:'458436083640', asses_name:'Ava Lopez',               father_name:'Late Michael Martin',  contact_email_address:'NULL', current_address:'House No. 310, Road No. 14, Sector-5, Oakhaven, NULL City' },\n  { si:'21', new_tin:'793991033674', asses_name:'Dr. Luna Lee',            father_name:'Alexander Jones',      contact_email_address:'drlunalee22@hotmail.com', current_address:'Building #19, Flat #A-5, Riverdale Residential Area, South District' },\n  { si:'22', new_tin:'327218920412', asses_name:'Md. Sophia Lopez',        father_name:'Mr. James Lopez',      contact_email_address:'mdsophialopez70@hotmail.com', current_address:'Building #15, Flat #B-6, Lakeside Residential Area, West End' },\n];\n\nconst FIELDS = ['new_tin','asses_name','father_name','contact_email_address','current_address'];\n\nconst collapse = (s) => String(s ?? '').replace(/\\s+/g, ' ').trim();\nconst isNullTok = (s) => ['', 'null', 'none', 'n/a', 'na'].includes(collapse(s).toLowerCase());\nconst eq = (a, b) => {\n  const ca = collapse(a), cb = collapse(b);\n  if (isNullTok(ca) && isNullTok(cb)) return true;   // NULL == null == empty (whole cell only)\n  return ca === cb;                                   // otherwise exact, case-sensitive\n};\n\nconst inp = $input.first().json;\nconst engineLabel = inp.engineLabel;\nconst actualRows = inp.rows || [];\nconst byId = {};\nfor (const r of actualRows) byId[collapse(r.si)] = r;\n\nconst mismatches = [];\nconst missingRows = [];\nlet checked = 0, correct = 0;\n\nfor (const exp of EXPECTED) {\n  const act = byId[collapse(exp.si)];\n  if (!act) { missingRows.push(exp.si); continue; }\n  for (const f of FIELDS) {\n    if (exp[f] === null || exp[f] === undefined) continue;   // unknown truth, skip\n    checked++;\n    if (eq(exp[f], act[f])) correct++;\n    else mismatches.push({ si: exp.si, field: f, expected: exp[f], got: act[f] || '(empty)' });\n  }\n}\n\nconst expectedIds = new Set(EXPECTED.map(e => collapse(e.si)));\nconst extraRows = actualRows.map(r => collapse(r.si)).filter(id => !expectedIds.has(id));\n\nconst accuracy = checked ? +(100 * correct / checked).toFixed(2) : 0;\nconst pass = mismatches.length === 0 && missingRows.length === 0 && extraRows.length === 0;\n\nconst summary = pass\n  ? `PASS - 100% (${correct}/${checked} cells) using ${engineLabel} in ${inp.elapsedSeconds}s`\n  : `FAIL - ${accuracy}% (${correct}/${checked} cells) using ${engineLabel}, ${mismatches.length} mismatches, ${missingRows.length} missing rows, in ${inp.elapsedSeconds}s`;\n\nconst report = mismatches.map(m => `Row ${m.si} | ${m.field}: expected \"${m.expected}\" got \"${m.got}\"`).join('\\n');\n\n// Build a styled HTML completion page\nconst statusColor = pass ? '#16a34a' : '#dc2626';\nconst statusBg    = pass ? '#f0fdf4' : '#fef2f2';\nconst statusEmoji = pass ? '🎉' : '⚠️';\nconst statusWord  = pass ? 'PASS' : 'FAIL';\n\nconst stat = (label, value) => `\n  <div style=\"flex:1;min-width:120px;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;text-align:center;\">\n    <div style=\"font-size:24px;font-weight:700;color:#111827;\">${value}</div>\n    <div style=\"font-size:12px;color:#6b7280;margin-top:4px;text-transform:uppercase;letter-spacing:.04em;\">${label}</div>\n  </div>`;\n\nconst rowsHtml = mismatches.length\n  ? `<table style=\"width:100%;border-collapse:collapse;margin-top:20px;font-size:13px;\">\n       <tr style=\"text-align:left;color:#6b7280;\">\n         <th style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb;\">Row</th>\n         <th style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb;\">Field</th>\n         <th style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb;\">Expected</th>\n         <th style=\"padding:6px 8px;border-bottom:1px solid #e5e7eb;\">Got</th>\n       </tr>\n       ${mismatches.map(m => `<tr>\n         <td style=\"padding:6px 8px;border-bottom:1px solid #f3f4f6;\">${m.si}</td>\n         <td style=\"padding:6px 8px;border-bottom:1px solid #f3f4f6;\">${m.field}</td>\n         <td style=\"padding:6px 8px;border-bottom:1px solid #f3f4f6;color:#16a34a;\">${m.expected}</td>\n         <td style=\"padding:6px 8px;border-bottom:1px solid #f3f4f6;color:#dc2626;\">${m.got}</td>\n       </tr>`).join('')}\n     </table>`\n  : `<p style=\"margin:20px 0 0;text-align:center;color:#16a34a;font-size:14px;\">Every cell matched the reference table. No discrepancies found.</p>`;\n\nconst html = `\n<style>@keyframes pop{0%{transform:scale(.9);opacity:0}100%{transform:scale(1);opacity:1}}</style>\n<div style=\"font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:640px;margin:24px auto;padding:0 16px;animation:pop .35s ease-out;\">\n  <div style=\"background:${statusBg};border:1px solid ${statusColor}33;border-radius:16px;padding:28px;text-align:center;\">\n    <div style=\"font-size:48px;line-height:1;\">${statusEmoji}</div>\n    <div style=\"font-size:30px;font-weight:800;color:${statusColor};margin-top:8px;\">${statusWord} &ndash; ${accuracy}%</div>\n    <div style=\"font-size:14px;color:#6b7280;margin-top:6px;\">${engineLabel}</div>\n  </div>\n  <div style=\"display:flex;gap:12px;flex-wrap:wrap;margin-top:16px;\">\n    ${stat('Cells correct', `${correct}/${checked}`)}\n    ${stat('Rows read', `${inp.rowCount}/${EXPECTED.length}`)}\n    ${stat('Time', `${inp.elapsedSeconds}s`)}\n  </div>\n  ${rowsHtml}\n</div>`;\n\nreturn [{ json: {\n  pass,\n  accuracy_pct: accuracy,\n  cells_checked: checked,\n  cells_correct: correct,\n  rows_expected: EXPECTED.length,\n  rows_extracted: inp.rowCount,\n  missing_rows: missingRows,\n  extra_row_ids: extraRows,\n  mismatch_count: mismatches.length,\n  mismatches,\n  engine_label: engineLabel,\n  extraction_ms: inp.elapsedMs,\n  extraction_seconds: inp.elapsedSeconds,\n  summary,\n  report,\n  html,\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        0
+      ],
+      "id": "b57bdd84-e6b3-4472-b446-e1c995f1f4dd",
+      "name": "Code: Validate & Score"
+    },
+    {
+      "parameters": {
+        "jsCode": "const startMs = $('Code: Start Timer').first().json.startMs;\nconst engineLabel = $('Code: Start Timer').first().json.engineLabel;\nconst elapsedMs = Date.now() - Number(startMs);\n\nconst out = $input.first().json || {};\nconst data = out.data ?? out;               // Extractor wraps output in `data`\n\nlet rows = null;\nif (Array.isArray(data)) rows = data;\nelse if (Array.isArray(data.records)) rows = data.records;\nelse if (Array.isArray(data.rows)) rows = data.rows;\nelse { for (const k of Object.keys(data)) { if (Array.isArray(data[k])) { rows = data[k]; break; } } }\nif (!rows) rows = [];\n\nconst norm = (v) => (v === null || v === undefined) ? '' : String(v).trim();\nconst shaped = rows.map((r) => ({\n  si: norm(r.si),\n  new_tin: norm(r.new_tin),\n  asses_name: norm(r.asses_name),\n  father_name: norm(r.father_name),\n  contact_email_address: norm(r.contact_email_address),\n  current_address: norm(r.current_address),\n}));\n\nreturn [{ json: {\n  engineLabel,\n  elapsedMs,\n  elapsedSeconds: +(elapsedMs / 1000).toFixed(2),\n  rowCount: shaped.length,\n  rows: shaped,\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "id": "ea0a0b07-0277-4d2a-b619-9c2cf8340616",
+      "name": "Code: Shape Rows & Time"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "YOUR_SPREADSHEET_NAME",
+          "cachedResultUrl": "YOUR_SPREADSHEET_URL"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "YOUR_SHEET_TAB",
+          "cachedResultUrl": "YOUR_SHEET_URL"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "run_at": "={{ $now.toISO() }}",
+            "engine_label": "={{ $json.engine_label }}",
+            "pass": "={{ $json.pass }}",
+            "accuracy_pct": "={{ $json.accuracy_pct }}",
+            "extraction_seconds": "={{ $json.extraction_seconds }}",
+            "mismatch_count": "={{ $json.mismatch_count }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "run_at",
+              "displayName": "run_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "engine_label",
+              "displayName": "engine_label",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "pass",
+              "displayName": "pass",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "accuracy_pct",
+              "displayName": "accuracy_pct",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "extraction_seconds",
+              "displayName": "extraction_seconds",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "mismatch_count",
+              "displayName": "mismatch_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1200,
+        0
+      ],
+      "id": "f0ba9257-c2ba-4322-afcb-bcbbc731df72",
+      "name": "Google Sheets: Append Test Log",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "YOUR_GOOGLE_SHEETS_ACCOUNT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "respondWith": "showText",
+        "responseText": "={{ $('Code: Validate & Score').first().json.html }}"
+      },
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        1440,
+        0
+      ],
+      "id": "2cfae5a3-1a60-460f-843c-1c09e14a3c95",
+      "name": "Form"
+    },
+    {
+      "parameters": {
+        "content": "## 🧪 Data Table Extraction Tester\n(powered by easybits)\n\nUpload a PDF or image, run it through the easybits Extractor, and get an instant pass/fail report that checks every extracted cell against a reference you define, plus how long the extraction took. Built to prove out table extraction and compare the two engines before you trust a pipeline in production.\n\n## ⚙️ How it works\n\n1. Upload a document on the form and pick which engine you used (General or Specialized) so it gets logged.\n2. A timer starts, then the easybits Extractor pulls the table into structured rows.\n3. A Code node flattens those rows and records how long the extraction took.\n4. A second Code node compares every cell against your reference data, scores the accuracy, and lists any mismatches.\n5. The run is logged to a Google Sheet and shown as a styled pass/fail card on the form completion screen.\n\n## 🚀 Set up steps\n\n1. In the easybits platform, create a pipeline for your document and build the response structure: a single \"records\" field set as an array of type object, with each column nested inside it. The full walkthrough is in the setup guide in this repo.\n2. In the Extractor node, select your pipeline and point the binary input at the form's file field.\n3. Open \"Code: Validate & Score\" and replace the EXPECTED array with your own known-good values, one object per row. Set any field you cannot verify to null and it will be skipped.\n4. Optional: add Google Sheets credentials and a sheet with these log columns: run_at, engine_label, pass, accuracy_pct, extraction_seconds, mismatch_count. Use RAW value input on the Append node.\n5. The \"Extraction Engine\" dropdown is only a label for the log. Set the actual model inside the pipeline in the easybits platform, then pick the matching label when you run.\n6. Run the form, read the pass/fail card, and use the mismatches list to refine your field descriptions until you hit 100 percent.",
+        "height": 864,
+        "width": 576
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -624,
+        -368
+      ],
+      "typeVersion": 1,
+      "id": "e2d3c0dd-df4e-46ad-8932-9a18b33f9811",
+      "name": "Sticky Note"
+    }
+  ],
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "Code: Start Timer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Start Timer": {
+      "main": [
+        [
+          {
+            "node": "easybits Extractor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "easybits Extractor": {
+      "main": [
+        [
+          {
+            "node": "Code: Shape Rows & Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Shape Rows & Time": {
+      "main": [
+        [
+          {
+            "node": "Code: Validate & Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Validate & Score": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets: Append Test Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets: Append Test Log": {
+      "main": [
+        [
+          {
+            "node": "Form",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  }
+}
