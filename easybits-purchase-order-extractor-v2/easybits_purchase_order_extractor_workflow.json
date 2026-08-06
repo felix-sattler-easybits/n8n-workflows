@@ -1,5 +1,5 @@
 {
-  "name": "Purchase Order Extractor Workflow Updated",
+  "name": "Purchase Order Extractor Workflow With EDI File Creation powered by easybits",
   "nodes": [
     {
       "parameters": {
