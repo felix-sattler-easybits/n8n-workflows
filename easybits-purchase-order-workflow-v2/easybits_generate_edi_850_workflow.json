@@ -1,5 +1,5 @@
 {
-  "name": "Purchase Order Extractor Workflow – Generate EDI 850",
+  "name": "Purchase Order Extractor Workflow – Generate EDI 850 by easybits",
   "nodes": [
     {
       "parameters": {
