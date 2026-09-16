@@ -1,0 +1,488 @@
+{
+  "name": "easybits Invoice Guardrail",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "6e9972f8-8468-417c-8d08-81ec58973520",
+      "name": "Invoice Guardrail Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1584,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.invoice_file_url }}",
+          "mode": "url"
+        },
+        "options": {}
+      },
+      "id": "1445cc17-851e-42f1-94f4-bbf523bdc545",
+      "name": "Download Invoice PDF",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -1280,
+        64
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "473543b7-e91d-43b8-87cb-820d0a53e286",
+      "name": "easybits Extractor",
+      "type": "@easybits/n8n-nodes-extractor.easybitsExtractor",
+      "typeVersion": 1,
+      "position": [
+        -976,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Invoices"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "invoice_number",
+              "lookupValue": "={{ $json.invoice_number }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a464df10-1b99-4599-8981-65512f6644e0",
+      "name": "Fetch Ground Truth From Books",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -1280,
+        528
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "a1530182-02c5-4a4d-8d2c-81657032a0cf",
+      "name": "Merge Invoice + Books",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        -672,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── Invoice guardrail: deterministic compare of the extracted PDF against your books ──\n// Runs AFTER the Merge node, so read with .first() (paired-item lineage breaks across merges).\nconst item      = $input.first().json;\nconst extracted = item.data || {};   // easybits Extractor wraps its output in a `data` envelope\nconst truth     = item;              // Google Sheets columns sit at the top level after the merge\n\n// Fields to verify. `extracted` = field key in your easybits pipeline; `truth` = column in your Sheet.\n// Keep these two name sets identical to the ones below or the compare silently skips them.\nconst FIELDS = [\n  { label: 'Invoice number', extracted: 'invoice_number', truth: 'invoice_number', type: 'id',     required: true },\n  { label: 'Customer name',  extracted: 'customer_name',  truth: 'customer_name',  type: 'text',   required: true },\n  { label: 'IBAN',           extracted: 'iban',           truth: 'iban',           type: 'iban',   required: true },\n  { label: 'VAT ID',         extracted: 'vat_id',         truth: 'vat_id',         type: 'id',     required: true },\n  { label: 'Net total',      extracted: 'total_net',      truth: 'total_net',      type: 'amount', required: true, tolerance: 0.01 },\n  { label: 'VAT amount',     extracted: 'vat_amount',     truth: 'vat_amount',     type: 'amount', required: true, tolerance: 0.01 },\n  { label: 'Gross total',    extracted: 'total_gross',    truth: 'total_gross',    type: 'amount', required: true, tolerance: 0.01 },\n  { label: 'Service period', extracted: 'service_period', truth: 'service_period', type: 'text',   required: false },\n];\n\n// Extractor returns the literal string \"null\" for empty fields; treat that as missing too.\nfunction isMissing(v) {\n  if (v === null || v === undefined) return true;\n  const s = String(v).trim();\n  return s === '' || s.toLowerCase() === 'null';\n}\n\nfunction normText(v) { return String(v).trim().replace(/\\s+/g, ' ').toLowerCase(); }\nfunction normId(v)   { return String(v).replace(/\\s+/g, '').toUpperCase(); } // IBAN / invoice no / VAT id\n\n// Parse money in either German (1.234,56) or English (1,234.56) format, strip currency symbols.\nfunction parseAmount(v) {\n  let s = String(v).replace(/[^\\d.,-]/g, '');\n  if (s === '') return null;\n  const lastComma = s.lastIndexOf(',');\n  const lastDot   = s.lastIndexOf('.');\n  const decSep    = lastComma > lastDot ? ',' : '.';\n  const thouSep   = decSep === ',' ? '.' : ',';\n  s = s.split(thouSep).join('').replace(decSep, '.');\n  const n = parseFloat(s);\n  return isNaN(n) ? null : n;\n}\n\nconst mismatches = [];\nconst missing    = [];\nconst checked    = [];\n\nfor (const f of FIELDS) {\n  const rawE = extracted[f.extracted];\n  const rawT = truth[f.truth];\n  const eMissing = isMissing(rawE);\n  const tMissing = isMissing(rawT);\n\n  if (f.required && tMissing) { missing.push(f.label + ' (no value found in your books)'); continue; }\n  if (f.required && eMissing) { missing.push(f.label + ' (missing on the invoice)');       continue; }\n  if (eMissing && tMissing)   { continue; } // optional field absent on both sides\n\n  let match;\n  if (f.type === 'amount') {\n    const en = parseAmount(rawE), tn = parseAmount(rawT);\n    match = en !== null && tn !== null && Math.abs(en - tn) <= (f.tolerance ?? 0.01);\n  } else if (f.type === 'iban' || f.type === 'id') {\n    match = normId(rawE) === normId(rawT);\n  } else {\n    match = normText(rawE) === normText(rawT);\n  }\n\n  checked.push(f.label);\n  if (!match) mismatches.push({ field: f.label, on_invoice: String(rawE), in_books: String(rawT) });\n}\n\nconst approved = mismatches.length === 0 && missing.length === 0;\n\nreturn [{\n  json: {\n    approved,\n    verdict: approved ? 'PASS' : 'FAIL',\n    invoice_number: truth.invoice_number ?? extracted.invoice_number ?? null,\n    reason: approved\n      ? 'All checked fields match your books.'\n      : 'Discrepancies found. Do not send.',\n    mismatches,\n    missing,\n    checked_fields: checked,\n  }\n}];\n"
+      },
+      "id": "57290afb-d9bd-4133-ac3a-db11f08288fb",
+      "name": "Compare To Books",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -368,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c754a1b0-6f3f-4709-8a88-b6ce086adb43",
+              "leftValue": "={{ $json.approved }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "030ead65-18db-4442-a90e-5ac18313f552",
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -64,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1aef0c42-530e-4117-adfc-edbc24e2ba89",
+              "name": "agent_instruction",
+              "type": "string",
+              "value": "APPROVED: you may send this invoice to the customer."
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "ec29a493-2a2e-40ff-92ef-2d3a22127cb6",
+      "name": "Return: Approved",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9fe769ca-a096-4fd0-bfee-f8c9137c9b23",
+              "name": "agent_instruction",
+              "type": "string",
+              "value": "REJECTED: do not send. Review the mismatches and missing fields, fix the invoice, then re-run this check."
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "f3494c0b-1f21-4f44-a6fd-04e3802a00f2",
+      "name": "Return: Rejected",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        544,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "your-email@example.com",
+        "subject": "ATTENTION – Invoice Generation Failed",
+        "message": "=<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>Invoice Guardrail Alert</title>\n</head>\n<body style=\"margin: 0; padding: 24px; background-color: #f4f6f8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1f2937;\">\n  <table align=\"center\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\" style=\"max-width: 600px; background-color: #ffffff; border-radius: 8px; border: 1px solid #e5e7eb; border-collapse: separate; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);\">\n    \n    <!-- Header Banner -->\n    <tr>\n      <td style=\"padding: 24px 32px; background-color: #fef2f2; border-bottom: 2px solid #fecaca; border-radius: 8px 8px 0 0;\">\n        <table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\">\n          <tr>\n            <td>\n              <span style=\"display: inline-block; background-color: #dc2626; color: #ffffff; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 4px 8px; border-radius: 4px; margin-bottom: 8px;\">\n                Action Required\n              </span>\n              <h1 style=\"margin: 0; font-size: 20px; font-weight: 700; color: #991b1b; line-height: 1.3;\">\n                Invoice Guardrail Failed\n              </h1>\n            </td>\n          </tr>\n        </table>\n      </td>\n    </tr>\n\n    <!-- Summary Details -->\n    <tr>\n      <td style=\"padding: 28px 32px 16px 32px;\">\n        <table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\" style=\"background-color: #f9fafb; border: 1px solid #f3f4f6; border-radius: 6px; padding: 16px;\">\n          <tr>\n            <td width=\"50%\" style=\"vertical-align: top; padding-right: 12px;\">\n              <span style=\"font-size: 12px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 4px;\">Invoice Number</span>\n              <strong style=\"font-size: 15px; color: #111827; font-family: monospace;\">{{ $json.invoice_number || 'unknown' }}</strong>\n            </td>\n            <td width=\"50%\" style=\"vertical-align: top; padding-left: 12px; border-left: 1px solid #e5e7eb;\">\n              <span style=\"font-size: 12px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 4px;\">Verdict</span>\n              <strong style=\"font-size: 15px; color: #dc2626;\">{{ $json.verdict }}</strong>\n            </td>\n          </tr>\n        </table>\n      </td>\n    </tr>\n\n    <!-- Detected Issues List -->\n    <tr>\n      <td style=\"padding: 8px 32px 32px 32px;\">\n        <h2 style=\"font-size: 14px; font-weight: 700; color: #374151; margin: 0 0 12px 0; text-transform: uppercase; letter-spacing: 0.05em;\">\n          Detected Discrepancies\n        </h2>\n        \n        <div style=\"background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden;\">\n          <!-- Dynamically inject items or fallback to template expressions -->\n          <ul style=\"margin: 0; padding: 16px 20px; list-style-type: none; font-size: 14px; line-height: 1.6; color: #4b5563;\">\n            {{ \n              ([].concat($json.missing || [], ($json.mismatches || []).map(function(m){ \n                return '<li style=\"padding: 6px 0; border-bottom: 1px solid #f3f4f6;\"><strong style=\"color: #991b1b;\">Mismatch:</strong> ' + m.field + ' <span style=\"font-size: 12px; color: #6b7280;\">(Invoice: <code>' + m.on_invoice + '</code> / Books: <code>' + m.in_books + '</code>)</span></li>'; \n              })).map(function(x){ \n                return typeof x === 'string' && x.startsWith('<li') ? x : '<li style=\"padding: 6px 0; border-bottom: 1px solid #f3f4f6;\"><strong style=\"color: #d97706;\">Missing:</strong> ' + x + '</li>'; \n              }).join('')) || '<li style=\"padding: 6px 0; color: #6b7280;\">None listed</li>' \n            }}\n          </ul>\n        </div>\n      </td>\n    </tr>\n\n    <!-- Footer -->\n    <tr>\n      <td style=\"padding: 20px 32px; background-color: #f9fafb; border-top: 1px solid #e5e7eb; border-radius: 0 0 8px 8px; text-align: center;\">\n        <p style=\"margin: 0; font-size: 12px; color: #9ca3af;\">\n          Automated dispatch from <strong>System Guardrail Node</strong>\n        </p>\n      </td>\n    </tr>\n\n  </table>\n</body>\n</html>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        512
+      ],
+      "id": "d76d0208-2e34-469c-8c4c-c341502b05f5",
+      "name": "Send a message"
+    },
+    {
+      "parameters": {
+        "content": "## ⚡ Invoice Guardrail Trigger\n\nTriggers workflow execution from an upstream AI agent.\n\n* Receives `invoice_file_url` and `invoice_number`\n* Passes data to start verification",
+        "height": 448,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1680,
+        16
+      ],
+      "typeVersion": 1,
+      "id": "0f2b9926-bb7e-4fd1-a8e8-1a0472be574c",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## 📥 Download Invoice PDF\n\nDownloads the invoice PDF file from Google Drive.\n\n* Takes `invoice_file_url` from trigger\n* Outputs binary PDF file for extraction",
+        "height": 448,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1376,
+        -208
+      ],
+      "typeVersion": 1,
+      "id": "b9eac29a-76d2-4cf5-9c9a-ee55dd2e23cf",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "## 🔍 easybits Extractor\n\nExtracts structured data points from the invoice PDF binary.\n\n* Extracts invoice details, customer data, VAT IDs, and monetary totals\n* Returns extracted values wrapped in a `data` JSON object",
+        "height": 448,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1072,
+        -208
+      ],
+      "typeVersion": 1,
+      "id": "2c871c63-4f4b-4d51-99bd-32d901f5bed1",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "## 📊 Fetch Ground Truth From Books\n\nQueries Google Sheets to fetch internal accounting records.\n\n* Looks up sheet row using `invoice_number`\n* Outputs expected baseline financial values",
+        "height": 448,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1376,
+        256
+      ],
+      "typeVersion": 1,
+      "id": "889fcaf1-9e6a-4bc0-939e-4bdeecccc18b",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "content": "## 🔀 Merge Invoice + Books\n\nCombines PDF extractions and Google Sheet data into one payload.\n\n* Merges OCR output (Input 1) and Sheet row (Input 2)\n* Prepares combined data for code comparison",
+        "height": 448,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -768,
+        16
+      ],
+      "typeVersion": 1,
+      "id": "21258af3-639f-4df0-9214-20c1abd833ff",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "content": "## ⚖️ Compare To Books\n\nCompares extracted PDF values directly against internal books.\n\n* Normalizes text, IBANs, and currency formats (0.01 tolerance)\n* Outputs `approved` boolean and logs any field mismatches",
+        "height": 448,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -464,
+        16
+      ],
+      "typeVersion": 1,
+      "id": "e4e40348-bcc6-40fc-b13f-df1519c42ba9",
+      "name": "Sticky Note6"
+    },
+    {
+      "parameters": {
+        "content": "## ❓ Approved?\n\nRoutes execution based on validation results.\n\n* **True:** All fields match -> Proceeds to approval\n* **False:** Discrepancies found -> Routes to alert notification",
+        "height": 448,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -160,
+        16
+      ],
+      "typeVersion": 1,
+      "id": "9d45da2d-61f2-493b-b62f-530160dfe1f6",
+      "name": "Sticky Note7"
+    },
+    {
+      "parameters": {
+        "content": "## ✅ Return: Approved\n\nReturns approval response back to the calling agent.\n\n* Sets instruction permitting agent to send invoice",
+        "height": 448,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        144,
+        -208
+      ],
+      "typeVersion": 1,
+      "id": "ff6e5296-7a4d-4641-9da0-b2d3c2d52664",
+      "name": "Sticky Note8"
+    },
+    {
+      "parameters": {
+        "content": "## 📧 Send Discrepancy Alert\n\nSends HTML email notification when verification fails.\n\n* Itemizes specific missing or mismatched fields",
+        "height": 448,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        144,
+        256
+      ],
+      "typeVersion": 1,
+      "id": "250aac45-1edd-4ece-adf7-7a4b945e2713",
+      "name": "Sticky Note9"
+    },
+    {
+      "parameters": {
+        "content": "## ❌ Return: Rejected\n\nReturns rejection response back to the calling agent.\n\n* Instructs agent to halt dispatch and review logged errors",
+        "height": 448,
+        "width": 288,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        448,
+        256
+      ],
+      "typeVersion": 1,
+      "id": "4a5a9f11-242d-48a1-a668-971d9d4824c1",
+      "name": "Sticky Note10"
+    },
+    {
+      "parameters": {
+        "content": "# 🛡️ Invoice Guardrail Verification – Extractor vs Books\n(powered by easybits)\n\nAn AI agent or parent workflow calls this sub-workflow as a safety guardrail before sending or paying an invoice. The workflow downloads the invoice PDF, extracts key financial metadata, and deterministically checks every value against your internal accounting record (Google Sheets). If all values match, it returns an approval instruction to the agent; if discrepancies or missing fields are found, it alerts your team via email and halts execution.\n\n## ⚙️ How It Works\n1. **Ingest & Extract:** Downloads the invoice PDF from Google Drive and extracts key financial data points using the easybits Extractor.\n2. **Fetch Ground Truth:** Queries your Google Sheet using the invoice number to retrieve expected baseline values from your books.\n3. **Compare & Validate:** Normalizes currency formats, IBAN spaces, and numbers to run a deterministic match check with tight tolerance.\n4. **Route & Alert:** Confirms approval back to the calling agent if 100% matched, or halts execution and emails your team a detailed discrepancy report if any field fails.\n\n## 🛠️ Setup Guide\n### 1. Install the easybits Extractor node\n**n8n Cloud:**\n- Open n8n → **Settings → Community nodes → Install**\n- Enter `@easybits/n8n-nodes-extractor` and click install\n- Refresh – the **easybits Extractor** node will appear in your node panel\n\n**Self-hosted n8n:**\n- SSH into your n8n instance\n- Run: `npm install @easybits/n8n-nodes-extractor` (in your n8n root directory)\n- Restart your n8n instance\n- The Extractor node will appear after restart\n\n**Get your API key:**\n- Sign up at `https://easybits.tech/`\n- Create an Extractor for Invoices with the 8 fields (`invoice_number`, `customer_name`, `iban`, `vat_id`, `total_net`, `vat_amount`, `total_gross`, `service_period`)\n- Copy your Pipeline ID and API key, then in n8n: **Credentials → Add credential → easybits Extractor API** and paste\n\n### 2. Set up your Google Sheet (Books)\n- Create or open the Google Sheet used to track your internal ground-truth invoice records\n- Ensure your sheet contains these exact column headers: `invoice_number`, `customer_name`, `iban`, `vat_id`, `total_net`, `vat_amount`, `total_gross`, `service_period`\n\n### 3. Set up n8n credentials\n- **Google Drive OAuth2** – for fetching the PDF file binary\n- **Google Sheets OAuth2** – for reading ground-truth records\n- **Gmail OAuth2** – for sending discrepancy alert emails\n- **easybits Extractor API** – for document extraction\n\n### 4. Configure & Activate\n- Update the recipient email address in **Send Discrepancy Alert**\n- Connect this sub-workflow to your parent AI agent tool node\n- Toggle workflow **Active** (top right)",
+        "height": 1216,
+        "width": 864
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -2560,
+        -368
+      ],
+      "typeVersion": 1,
+      "id": "5f7121c5-6864-4bc2-94ab-e8e2908fe599",
+      "name": "Sticky Note4"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Invoice Guardrail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Download Invoice PDF",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Ground Truth From Books",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Invoice PDF": {
+      "main": [
+        [
+          {
+            "node": "easybits Extractor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "easybits Extractor": {
+      "main": [
+        [
+          {
+            "node": "Merge Invoice + Books",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Ground Truth From Books": {
+      "main": [
+        [
+          {
+            "node": "Merge Invoice + Books",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Invoice + Books": {
+      "main": [
+        [
+          {
+            "node": "Compare To Books",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compare To Books": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "Return: Approved",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "Return: Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  }
+}
