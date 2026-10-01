@@ -1,5 +1,5 @@
 {
-  "name": "Invoice Intake and Logging (Gmail to Google Sheets + Telegram)",
+  "name": "Invoice Intake and Logging (Gmail to Google Sheets + Telegram powered by easybits)",
   "nodes": [
     {
       "parameters": {
