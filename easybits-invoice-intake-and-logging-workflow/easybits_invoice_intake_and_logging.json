@@ -1,5 +1,5 @@
 {
-  "name": "Invoice Intake and Logging (Gmail to Google Sheets + Telegram powered by easybits)",
+  "name": "Invoice Intake and Logging",
   "nodes": [
     {
       "parameters": {
@@ -27,13 +27,7 @@
         0
       ],
       "id": "e9206597-3c69-49d3-be98-92f9749749be",
-      "name": "Trigger: New Unread Email",
-      "credentials": {
-        "gmailOAuth2": {
-          "id": "",
-          "name": ""
-        }
-      }
+      "name": "Trigger: New Unread Email"
     },
     {
       "parameters": {
@@ -73,13 +67,7 @@
         -144
       ],
       "id": "4cc33f1a-a4be-4ef7-8f96-abc31d47182e",
-      "name": "Gmail: Mark as Read",
-      "credentials": {
-        "gmailOAuth2": {
-          "id": "",
-          "name": ""
-        }
-      }
+      "name": "Gmail: Mark as Read"
     },
     {
       "parameters": {
@@ -123,13 +111,7 @@
         192
       ],
       "id": "a23dcbee-125c-41cb-be86-d1cac9b8da42",
-      "name": "Extract: Document Fields",
-      "credentials": {
-        "easybitsExtractorApi": {
-          "id": "",
-          "name": ""
-        }
-      }
+      "name": "Extract: Document Fields"
     },
     {
       "parameters": {
@@ -168,13 +150,14 @@
       "parameters": {
         "documentId": {
           "__rl": true,
-          "mode": "list",
-          "value": "YOUR_VALUE_HERE"
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
         },
         "sheetName": {
           "__rl": true,
+          "value": "gid=0",
           "mode": "list",
-          "value": "YOUR_VALUE_HERE"
+          "cachedResultName": "Invoices"
         },
         "filtersUI": {
           "values": [
@@ -194,13 +177,7 @@
       ],
       "id": "777ead7f-d193-4f83-ac29-377af380170a",
       "name": "Sheets: Find Existing Invoice",
-      "alwaysOutputData": true,
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "",
-          "name": ""
-        }
-      }
+      "alwaysOutputData": true
     },
     {
       "parameters": {
@@ -241,13 +218,14 @@
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "mode": "list",
-          "value": "YOUR_VALUE_HERE"
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
         },
         "sheetName": {
           "__rl": true,
+          "value": "gid=0",
           "mode": "list",
-          "value": "YOUR_VALUE_HERE"
+          "cachedResultName": "Invoices"
         },
         "columns": {
           "mappingMode": "defineBelow",
@@ -339,18 +317,12 @@
         0
       ],
       "id": "015f9c3f-3e70-4420-8d83-93b4ebd3b08a",
-      "name": "Sheets: Append Invoice Row",
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "",
-          "name": ""
-        }
-      }
+      "name": "Sheets: Append Invoice Row"
     },
     {
       "parameters": {
-        "chatId": "YOUR_CHAT_ID",
-        "text": "=\ud83e\uddfe *New Invoice Processed*\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\ud83d\udc64 *Vendor:* {{ $json.vendor_name }}\n\ud83d\udee0 *Service:* {{ $json.service_name }}\n\ud83d\udcc5 *Period:* {{ $json.service_period || 'N/A' }}\n\ud83d\udd22 *Invoice #:* `{{ $json.invoice_number }}`\n\n\ud83d\udcb0 *Financials:*\n\u2022 Net: ${{ Number($json.total_net || 0).toFixed(2) }}\n\u2022 VAT: ${{ Number($json.vat_amount || 0).toFixed(2) }}\n\u2022 *Total Gross:* *${{ Number($json.total_gross || 0).toFixed(2) }}*",
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "=🧾 *New Invoice Processed*\n────────────────\n👤 *Vendor:* {{ $json.vendor_name }}\n🛠 *Service:* {{ $json.service_name }}\n📅 *Period:* {{ $json.service_period || 'N/A' }}\n🔢 *Invoice #:* `{{ $json.invoice_number }}`\n\n💰 *Financials:*\n• Net: ${{ Number($json.total_net || 0).toFixed(2) }}\n• VAT: ${{ Number($json.vat_amount || 0).toFixed(2) }}\n• *Total Gross:* *${{ Number($json.total_gross || 0).toFixed(2) }}*",
         "additionalFields": {
           "appendAttribution": false
         }
@@ -362,17 +334,11 @@
         0
       ],
       "id": "81fb0282-7f93-4751-8fec-874723017284",
-      "name": "Telegram: Send Invoice Alert",
-      "credentials": {
-        "telegramApi": {
-          "id": "",
-          "name": ""
-        }
-      }
+      "name": "Telegram: Send Invoice Alert"
     },
     {
       "parameters": {
-        "content": "### \ud83d\udce5 Intake and Prepare\nPulls unread emails, filters out junk attachments, and queues each real file one at a time through the loop.",
+        "content": "### 📥 Intake and Prepare\nPulls unread emails, filters out junk attachments, and queues each real file one at a time through the loop.",
         "height": 336,
         "width": 656,
         "color": 5
@@ -388,7 +354,7 @@
     },
     {
       "parameters": {
-        "content": "### \ud83d\udd0d Filter and Extract\nPasses only supported file types (PDF, JPEG, PNG, WebP) to the Extractor, which reads the invoice fields and classifies the document.",
+        "content": "### 🔍 Filter and Extract\nPasses only supported file types (PDF, JPEG, PNG, WebP) to the Extractor, which reads the invoice fields and classifies the document.",
         "height": 336,
         "width": 496,
         "color": 6
@@ -404,7 +370,7 @@
     },
     {
       "parameters": {
-        "content": "### \ud83d\uddc2 Classify and Deduplicate\nKeeps only documents classed as invoices, then looks them up in the sheet by invoice number so the same invoice is never logged twice.",
+        "content": "### 🗂 Classify and Deduplicate\nKeeps only documents classed as invoices, then looks them up in the sheet by invoice number so the same invoice is never logged twice.",
         "height": 336,
         "width": 656,
         "color": 2
@@ -420,7 +386,7 @@
     },
     {
       "parameters": {
-        "content": "### \u2705 Record and Notify\nAppends each new invoice as a row in the Google Sheet and sends a formatted Telegram alert with the vendor and totals.",
+        "content": "### ✅ Record and Notify\nAppends each new invoice as a row in the Google Sheet and sends a formatted Telegram alert with the vendor and totals.",
         "height": 336,
         "width": 480,
         "color": 4
@@ -436,7 +402,7 @@
     },
     {
       "parameters": {
-        "content": "## \ud83e\uddfe Invoice Intake and Logging\npowered by easybits\n\n**What it does**\nWatches a Gmail inbox for unread emails with attachments, extracts the fields from any invoice it finds, logs new invoices to a Google Sheet, and sends a Telegram alert. Duplicate invoices are skipped automatically.\n\n**How it works**\n1. The Gmail trigger polls every minute for unread mail and downloads attachments.\n2. The Code node keeps only real attachments (drops inline images under 10 KB) and normalizes each one to the `data` binary key.\n3. Loop Over Items processes one attachment per run, which the Extractor requires.\n4. Supported file types (PDF, JPEG, PNG, WebP) go to the easybits Extractor, which returns the invoice fields plus a `document_class`.\n5. Only documents classed as `invoice` continue. The sheet is checked by invoice number, and only unseen invoices are appended and announced on Telegram.\n\n**Set up steps**\n1. Gmail trigger: connect your Gmail OAuth2 credential. Attachment download is already enabled.\n2. Extractor: add your easybits Extractor credential and build a pipeline returning `document_class`, `invoice_number`, `vendor_name`, `service_name`, `service_period`, `total_net`, `vat_amount`, `total_gross`.\n3. Google Sheets (both nodes): select your invoice spreadsheet and tab. Column headers must match the field names above.\n4. Telegram: set your bot credential and replace the chat ID with your own.\n5. Activate the workflow.",
+        "content": "## 🧾 Invoice Intake and Logging\npowered by easybits\n\n**What it does**\nWatches a Gmail inbox for unread emails with attachments, extracts the fields from any invoice it finds, logs new invoices to a Google Sheet, and sends a Telegram alert. Duplicate invoices are skipped automatically.\n\n**How it works**\n1. The Gmail trigger polls every minute for unread mail and downloads attachments.\n2. The Code node keeps only real attachments (drops inline images under 10 KB) and normalizes each one to the `data` binary key.\n3. Loop Over Items processes one attachment per run, which the Extractor requires.\n4. Supported file types (PDF, JPEG, PNG, WebP) go to the easybits Extractor, which returns the invoice fields plus a `document_class`.\n5. Only documents classed as `invoice` continue. The sheet is checked by invoice number, and only unseen invoices are appended and announced on Telegram.\n\n**Set up steps**\n1. Gmail trigger: connect your Gmail OAuth2 credential. Attachment download is already enabled.\n2. Extractor: add your easybits Extractor credential and build a pipeline returning `document_class`, `invoice_number`, `vendor_name`, `service_name`, `service_period`, `total_net`, `vat_amount`, `total_gross`.\n3. Google Sheets (both nodes): select your invoice spreadsheet and tab. Column headers must match the field names above.\n4. Telegram: set your bot credential and replace the chat ID with your own.\n5. Activate the workflow.",
         "height": 688,
         "width": 512
       },
@@ -450,6 +416,7 @@
       "name": "Sticky Note4"
     }
   ],
+  "pinData": {},
   "connections": {
     "Trigger: New Unread Email": {
       "main": [
@@ -588,5 +555,6 @@
   "settings": {
     "executionOrder": "v1",
     "availableInMCP": false
-  }
+  },
+  "tags": []
 }
